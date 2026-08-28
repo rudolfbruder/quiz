@@ -26,8 +26,7 @@ the hot path. The cooldown was a pitch, never a promise, and it is superseded he
   reviewable without any interface.
 
 Deliberately not in this change: serving, answering, scoring, the write-back to `ReviewState`, and every
-Vue surface. Those are `add-quiz-answering`. The retention field's ramp correction is
-`add-retention-field`. No HTTP route is added here.
+Vue surface. Those are `add-quiz-answering`. No HTTP route is added here.
 
 ## Capabilities
 
@@ -39,8 +38,8 @@ Vue surface. Those are `add-quiz-answering`. The retention field's ramp correcti
 
 ### Modified Capabilities
 
-None. `add-domain-foundation` is not archived, so its specs are not yet under `openspec/specs/`, and
-neither its data model nor its scheduling requirements change here.
+None. `study-data-model` and `review-scheduling` are in `openspec/specs/` and neither changes here: this
+adds a new capability that consumes them.
 
 ## Impact
 
@@ -50,6 +49,5 @@ neither its data model nor its scheduling requirements change here.
   rule replaced.
 - **Untouched**: every migration, model, factory and seeder. No route, no controller, no Vue file.
 - **Dependencies**: none.
-- **Downstream**: `add-quiz-answering` consumes this action. `add-retention-field` corrects the ramp in
-  `resources/js/lib/glyph.ts` against the same rule. `add-glyph-migration` moves the starter-kit surfaces
-  into the `glyph-grid` world.
+- **Downstream**: `add-quiz-answering` consumes this action. Any later visualisation of a learner's
+  retention reads the same rule rather than reimplementing it.

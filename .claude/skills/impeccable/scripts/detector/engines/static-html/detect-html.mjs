@@ -1,14 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { GENERIC_FONTS, OVERUSED_FONTS } from '../../shared/constants.mjs';
 import {
   checkSourceDesignSystem,
   collectStaticDesignSystemFindings,
   mergeDesignSystemFindings,
 } from '../../design-system.mjs';
-import { isFullPage } from '../../shared/page.mjs';
-import { applyInlineIgnores } from '../../shared/inline-ignores.mjs';
 import { finding } from '../../findings.mjs';
 import { profileFindings, profileStep, profileStepAsync } from '../../profile/profiler.mjs';
 import {
@@ -36,6 +33,9 @@ import {
   resolveBackground,
   resolveBorderRadiusPx,
 } from '../../rules/checks.mjs';
+import { GENERIC_FONTS, OVERUSED_FONTS } from '../../shared/constants.mjs';
+import { applyInlineIgnores } from '../../shared/inline-ignores.mjs';
+import { isFullPage } from '../../shared/page.mjs';
 import { detectText, runTextContentAnalyzers } from '../regex/detect-text.mjs';
 import {
   StaticDocument,
@@ -48,45 +48,70 @@ function checkStaticPageTypography(document, window) {
   const findings = [];
   const fonts = new Set();
   const overusedFound = new Set();
+
   for (const el of document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th, dd, blockquote, figcaption, a, button, label, span, div')) {
     const hasText = el.childNodes.some(n => n.nodeType === 3 && n.textContent.trim().length > 0);
-    if (!hasText) continue;
+
+    if (!hasText) {
+continue;
+}
+
     const ff = window.getComputedStyle(el).fontFamily || '';
     const stack = ff.split(',').map(f => f.trim().replace(/^['"]|['"]$/g, '').toLowerCase());
     const primary = stack.find(f => f && !GENERIC_FONTS.has(f));
-    if (!primary) continue;
+
+    if (!primary) {
+continue;
+}
+
     fonts.add(primary);
-    if (OVERUSED_FONTS.has(primary)) overusedFound.add(primary);
+
+    if (OVERUSED_FONTS.has(primary)) {
+overusedFound.add(primary);
+}
   }
+
   for (const font of overusedFound) {
     findings.push({ id: 'overused-font', snippet: `Primary font: ${font}` });
   }
+
   const sizes = new Set();
+
   for (const el of document.querySelectorAll('h1, h2, h3, h4, h5, h6, p, span, a, li, td, th, label, button, div')) {
     const fontSize = parseFloat(window.getComputedStyle(el).fontSize);
-    if (fontSize >= 8 && fontSize < 200) sizes.add(Math.round(fontSize * 10) / 10);
+
+    if (fontSize >= 8 && fontSize < 200) {
+sizes.add(Math.round(fontSize * 10) / 10);
+}
   }
+
   if (sizes.size >= 3) {
     const sorted = [...sizes].sort((a, b) => a - b);
     const ratio = sorted[sorted.length - 1] / sorted[0];
+
     if (ratio < 2.0) {
       findings.push({ id: 'flat-type-hierarchy', snippet: `Sizes: ${sorted.map(s => s + 'px').join(', ')} (ratio ${ratio.toFixed(1)}:1)` });
     }
   }
+
   return findings;
 }
 
 function checkElementBrokenImage(el) {
   const src = (el.getAttribute && el.getAttribute('src')) ?? el.attribs?.src;
+
   // Missing src attribute entirely
   if (src === undefined || src === null) {
     return [{ id: 'broken-image', snippet: '<img> with no src attribute' }];
   }
+
   const trimmed = String(src).trim();
+
   // Empty or placeholder-only src values
   if (trimmed === '' || trimmed === '#') {
     return [{ id: 'broken-image', snippet: `<img src="${src}">` }];
   }
+
   return [];
 }
 
@@ -117,6 +142,7 @@ async function detectHtml(filePath, options = {}) {
   }, () => fs.readFileSync(filePath, 'utf-8'));
 
   let modules;
+
   try {
     modules = await profileStepAsync(profile, {
       engine: 'static-html',
@@ -130,6 +156,7 @@ async function detectHtml(filePath, options = {}) {
         import('css-tree'),
         import('domutils'),
       ]);
+
       return {
         parseDocument: htmlparser2.parseDocument,
         selectAll: cssSelect.selectAll,
@@ -176,16 +203,22 @@ async function detectHtml(filePath, options = {}) {
     : callback();
 
   const visitedByRule = new Map();
+
   for (const rule of STATIC_ELEMENT_RULES) {
     const elements = document.querySelectorAll(rule.selector);
     visitedByRule.set(rule.id, elements.length);
+
     for (const el of elements) {
       const tag = el.tagName.toLowerCase();
       const style = window.getComputedStyle(el);
+
       for (const f of runElementCheck(rule.id, () => rule.run(el, tag, style, window, customPropMap))) {
         // Element-scoped waivers: a data-impeccable-ignore ancestor suppresses
         // matching findings for its subtree, same as the browser walk.
-        if (scopedIgnoreActive(el, f.id)) continue;
+        if (scopedIgnoreActive(el, f.id)) {
+continue;
+}
+
         findings.push(finding(f.id, filePath, f.snippet));
       }
     }
@@ -211,27 +244,35 @@ async function detectHtml(filePath, options = {}) {
     const runPageCheck = (ruleId, callback) => profile
       ? profileFindings(profile, { engine: 'static-html', phase: 'page', ruleId, target: filePath }, callback)
       : callback();
+
     for (const f of runPageCheck('typography-rules', () => checkStaticPageTypography(document, window))) {
       findings.push(finding(f.id, filePath, f.snippet));
     }
+
     for (const f of runPageCheck('kicker-above-heading', () => checkKickerAboveHeadingFromDoc(document, window))) {
       findings.push(finding(f.id, filePath, f.snippet));
     }
+
     for (const f of runPageCheck('numbered-section-labels', () => checkNumberedSectionLabelsFromDoc(document, window))) {
       findings.push(finding(f.id, filePath, f.snippet));
     }
+
     for (const f of runPageCheck('repeated-container-text', () => checkRepeatedContainerTextFromDoc(document, window))) {
       findings.push(finding(f.id, filePath, f.snippet));
     }
+
     for (const f of runPageCheck('layout-rules', () => checkPageLayout(document, window))) {
       findings.push(finding(f.id, filePath, f.snippet));
     }
+
     for (const f of runPageCheck('cream-palette', () => checkCreamPalette(document, window))) {
       findings.push(finding(f.id, filePath, f.snippet));
     }
+
     for (const f of runPageCheck('skipped-heading', () => checkPageQualityFromDoc(document))) {
       findings.push(finding(f.id, filePath, f.snippet));
     }
+
     // Scoped corpora for the pattern checks (see buildHtmlPatternCorpora in
     // rules/checks.mjs): CSS-property regexes must not fire on prose ABOUT
     // css — `<code>background-clip: text</code>` in a changelog is
@@ -240,16 +281,26 @@ async function detectHtml(filePath, options = {}) {
     // from the parsed document, so escaped code samples never contribute.
     const styleAttrParts = [];
     const classAttrParts = [];
+
     for (const el of document.querySelectorAll('*')) {
       const styleAttr = el.getAttribute('style');
-      if (styleAttr) styleAttrParts.push(`style="${styleAttr}"`);
+
+      if (styleAttr) {
+styleAttrParts.push(`style="${styleAttr}"`);
+}
+
       const classAttr = el.getAttribute('class');
-      if (classAttr) classAttrParts.push(classAttr);
+
+      if (classAttr) {
+classAttrParts.push(classAttr);
+}
     }
+
     const patternCorpora = {
       styleText: [cssText, ...styleAttrParts].join('\n'),
       classText: classAttrParts.join('\n'),
     };
+
     for (const f of runPageCheck('html-patterns', () => checkHtmlPatterns(html, patternCorpora).filter(item =>
       item.id !== 'bounce-easing' && item.id !== 'layout-transition'
     ))) {
@@ -259,18 +310,30 @@ async function detectHtml(filePath, options = {}) {
       // selector keeps the finding — static scans see partial documents.
       if (f.selector) {
         let matches = null;
+
         try {
           matches = document.querySelectorAll(String(f.selector).replace(/::?[a-zA-Z-]+(\([^)]*\))?/g, '').trim());
-        } catch { matches = null; }
-        if (matches && matches.length > 0 && [...matches].every(el => scopedIgnoreActive(el, f.id))) continue;
+        } catch {
+ matches = null; 
+}
+
+        if (matches && matches.length > 0 && [...matches].every(el => scopedIgnoreActive(el, f.id))) {
+continue;
+}
       }
+
       const item = finding(f.id, filePath, f.snippet);
+
       // Position-aware severity promotion: checks may attach a per-finding
       // severity (e.g. a pulsing dot inside a header/nav landmark) that
       // overrides the registry default.
-      if (f.severity) item.severity = f.severity;
+      if (f.severity) {
+item.severity = f.severity;
+}
+
       findings.push(item);
     }
+
     // Text-content analyzers (em-dash overuse, marketing buzzwords,
     // numbered section markers, aphoristic cadence) live in the regex
     // engine. Call them from here so .html files get the same coverage

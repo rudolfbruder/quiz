@@ -29,8 +29,7 @@ that already exists behind Fortify's auth.
 **Deliberately not in this change**, and each is a later one: the three-candidate-outline choice
 (`quiz_proposals` gets exactly one auto-accepted row per source here, because `quizzes` requires one);
 DOCX, which OpenAI does not accept as a document attachment and which would need a parsing dependency;
-notifications; taking the quiz, which `add-daily-quiz` already specifies; and any `glyph-grid` design
-migration — this surface is built on the dashboard as it stands today.
+notifications; and taking the quiz, which `add-daily-selection` and `add-quiz-answering` specify.
 
 ## Capabilities
 
@@ -44,8 +43,8 @@ migration — this surface is built on the dashboard as it stands today.
 
 ### Modified Capabilities
 
-None. `add-domain-foundation` is not archived, so its specs are not yet under `openspec/specs/`, and
-neither its data model nor its scheduling requirements change here.
+None. `study-data-model` and `review-scheduling` are in `openspec/specs/` and neither changes here:
+this adds new capabilities that consume them.
 
 ## Impact
 

@@ -119,7 +119,11 @@ export function designSidecarCandidatesFor(projectRoot, contextDir = projectRoot
     path.join(projectRoot, 'DESIGN.json'),
   ];
   const contextLegacy = path.join(contextDir || projectRoot, 'DESIGN.json');
-  if (!candidates.includes(contextLegacy)) candidates.push(contextLegacy);
+
+  if (!candidates.includes(contextLegacy)) {
+candidates.push(contextLegacy);
+}
+
   return candidates;
 }
 
@@ -141,12 +145,17 @@ function mtimeMs(filePath) {
 
 function hasSection(markdown, heading) {
   const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
   return new RegExp(`^##\\s+${escaped}\\s*$`, 'im').test(String(markdown || ''));
 }
 
 function toRelative(filePath, root) {
-  if (!filePath) return null;
+  if (!filePath) {
+return null;
+}
+
   const rel = path.relative(root, filePath);
+
   return rel && !rel.startsWith('..') && !path.isAbsolute(rel)
     ? rel.split(path.sep).join('/')
     : filePath;
@@ -159,11 +168,17 @@ function toRelative(filePath, root) {
  * reporting only.
  */
 export function checkProduct(product, productPath = 'PRODUCT.md') {
-  if (!product) return [];
+  if (!product) {
+return [];
+}
+
   const findings = [];
 
   for (const [heading, reason] of Object.entries(PRODUCT_DEPRECATED_SECTIONS)) {
-    if (!hasSection(product, heading)) continue;
+    if (!hasSection(product, heading)) {
+continue;
+}
+
     findings.push(finding({
       id: `product-deprecated-${heading.toLowerCase()}`,
       artifact: 'PRODUCT.md',
@@ -176,6 +191,7 @@ export function checkProduct(product, productPath = 'PRODUCT.md') {
   }
 
   const stamped = readProductSchemaVersion(product);
+
   if (stamped === null && !PRODUCT_V4_SECTIONS.some((section) => hasSection(product, section))) {
     findings.push(finding({
       id: 'product-schema-legacy',
@@ -206,23 +222,39 @@ export function checkProduct(product, productPath = 'PRODUCT.md') {
  * a handful of stats plus one package.json read at the project root.
  */
 export function checkNativePlatformEvidence({ projectRoot, platform, product, productPath }) {
-  if (!projectRoot) return [];
+  if (!projectRoot) {
+return [];
+}
+
   // Only the web resolution is worth checking. An explicit native value is
   // already honored, and an unrecognized value already gets its own warning.
-  if (platform && platform !== 'web') return [];
+  if (platform && platform !== 'web') {
+return [];
+}
 
   const evidence = [];
+
   for (const entry of NATIVE_EVIDENCE_PATHS) {
-    if (fs.existsSync(path.join(projectRoot, entry.rel))) evidence.push(entry);
+    if (fs.existsSync(path.join(projectRoot, entry.rel))) {
+evidence.push(entry);
+}
   }
+
   const pkg = readJson(path.join(projectRoot, 'package.json'));
+
   if (pkg) {
     const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+
     for (const entry of NATIVE_EVIDENCE_DEPENDENCIES) {
-      if (deps[entry.name]) evidence.push(entry);
+      if (deps[entry.name]) {
+evidence.push(entry);
+}
     }
   }
-  if (!evidence.length) return [];
+
+  if (!evidence.length) {
+return [];
+}
 
   const platforms = new Set(evidence.map((entry) => entry.platform));
   const suggested = platforms.size > 1 || platforms.has('adaptive')
@@ -260,7 +292,10 @@ export function checkDesignSidecar({ designPath, sidecarCandidates = [], project
   const findings = [];
   const canonical = sidecarCandidates[0] || null;
   const present = sidecarCandidates.find((candidate) => fs.existsSync(candidate)) || null;
-  if (!present) return findings;
+
+  if (!present) {
+return findings;
+}
 
   const relPresent = toRelative(present, projectRoot);
 
@@ -278,6 +313,7 @@ export function checkDesignSidecar({ designPath, sidecarCandidates = [], project
 
   const sidecar = readJson(present);
   const schemaVersion = readSidecarSchemaVersion(sidecar);
+
   if (sidecar && (schemaVersion === null || schemaVersion < DESIGN_SIDECAR_SCHEMA_VERSION)) {
     findings.push(finding({
       id: 'design-sidecar-schema-outdated',
@@ -294,6 +330,7 @@ export function checkDesignSidecar({ designPath, sidecarCandidates = [], project
   if (designPath) {
     const designMtime = mtimeMs(designPath);
     const sidecarMtime = mtimeMs(present);
+
     if (designMtime !== null && sidecarMtime !== null && designMtime > sidecarMtime) {
       findings.push(finding({
         id: 'design-sidecar-stale',
@@ -320,14 +357,20 @@ export function checkDesignSidecar({ designPath, sidecarCandidates = [], project
 export function checkConfig({ projectRoot, repoRoot }) {
   const findings = [];
   const roots = [...new Set([projectRoot, repoRoot].filter(Boolean).map((root) => path.resolve(root)))];
+
   for (const root of roots) {
     for (const name of ['config.json', 'config.local.json']) {
       const filePath = path.join(root, '.impeccable', name);
       const raw = readJson(filePath);
-      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+continue;
+}
+
       const rel = toRelative(filePath, projectRoot || root);
 
       const unknownTop = Object.keys(raw).filter((key) => !KNOWN_CONFIG_KEYS.has(key));
+
       if (unknownTop.length) {
         findings.push(finding({
           id: 'config-unknown-keys',
@@ -355,8 +398,10 @@ export function checkConfig({ projectRoot, repoRoot }) {
       }
 
       const detector = raw.detector;
+
       if (detector && typeof detector === 'object' && !Array.isArray(detector)) {
         const unknownDetector = Object.keys(detector).filter((key) => !KNOWN_DETECTOR_KEYS.has(key));
+
         if (unknownDetector.length) {
           findings.push(finding({
             id: 'config-unknown-detector-keys',
@@ -371,6 +416,7 @@ export function checkConfig({ projectRoot, repoRoot }) {
       }
     }
   }
+
   return findings;
 }
 
@@ -385,20 +431,29 @@ export function checkConfig({ projectRoot, repoRoot }) {
  * finding hands the question to the one reader that knows.
  */
 export function checkBuildPathUnset({ projectRoot, repoRoot, product }) {
-  if (!projectRoot || !product) return [];
+  if (!projectRoot || !product) {
+return [];
+}
+
   const roots = [...new Set([projectRoot, repoRoot].filter(Boolean).map((root) => path.resolve(root)))];
 
   for (const root of roots) {
     for (const name of ['config.json', 'config.local.json']) {
       const raw = readJson(path.join(root, '.impeccable', name));
+
       // Any declared value ends this, valid or not: an invalid one already has
       // its own finding and two reports of one key is noise.
-      if (raw && Object.prototype.hasOwnProperty.call(raw, 'buildPath')) return [];
+      if (raw && Object.prototype.hasOwnProperty.call(raw, 'buildPath')) {
+return [];
+}
     }
   }
 
   const evidence = DIRECTION_WORK_PATHS.filter((rel) => fs.existsSync(path.join(projectRoot, rel)));
-  if (!evidence.length) return [];
+
+  if (!evidence.length) {
+return [];
+}
 
   return [finding({
     id: 'config-build-path-unset',
@@ -423,15 +478,32 @@ export function checkBuildPathUnset({ projectRoot, repoRoot, product }) {
  * no file to check and are skipped.
  */
 export function checkSurfaceBriefs({ candidates = [], projectRoot }) {
-  if (!projectRoot) return [];
+  if (!projectRoot) {
+return [];
+}
+
   const orphaned = [];
+
   for (const brief of candidates) {
     const target = brief?.primaryTarget;
-    if (!target || typeof target !== 'string') continue;
-    if (/^https?:\/\//i.test(target) || target.startsWith('route:')) continue;
-    if (!fs.existsSync(path.join(projectRoot, target))) orphaned.push(brief);
+
+    if (!target || typeof target !== 'string') {
+continue;
+}
+
+    if (/^https?:\/\//i.test(target) || target.startsWith('route:')) {
+continue;
+}
+
+    if (!fs.existsSync(path.join(projectRoot, target))) {
+orphaned.push(brief);
+}
   }
-  if (!orphaned.length) return [];
+
+  if (!orphaned.length) {
+return [];
+}
+
   return [finding({
     id: 'surface-brief-orphaned',
     artifact: 'surface brief',
@@ -456,7 +528,11 @@ export function checkSurfaceBriefs({ candidates = [], projectRoot }) {
  */
 export function checkProjectRoots({ patterns = [], candidates = [], configuredIn = '.impeccable/config.json' }) {
   const positive = patterns.filter((pattern) => pattern && !String(pattern).trim().startsWith('!'));
-  if (!positive.length || candidates.length) return [];
+
+  if (!positive.length || candidates.length) {
+return [];
+}
+
   return [finding({
     id: 'config-project-roots-match-nothing',
     artifact: 'config.json',
@@ -494,7 +570,10 @@ export function describeWorkspaceContext(candidates = []) {
  * nothing is recomputed here.
  */
 export function collectBootFindingGroups(ctx, extras = {}) {
-  if (!ctx) return {};
+  if (!ctx) {
+return {};
+}
+
   const projectRoot = ctx.projectRoot || process.cwd();
   const absDesignPath = extras.absDesignPath || null;
 

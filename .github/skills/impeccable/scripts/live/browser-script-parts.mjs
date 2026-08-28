@@ -10,7 +10,10 @@ export const LIVE_BROWSER_SCRIPT_PARTS = Object.freeze([
 ]);
 
 export function resolveLiveBrowserScriptParts(scriptsDir, parts = LIVE_BROWSER_SCRIPT_PARTS) {
-  if (!scriptsDir) throw new Error('scriptsDir is required');
+  if (!scriptsDir) {
+throw new Error('scriptsDir is required');
+}
+
   return parts.map((part, index) => ({
     ...part,
     index,
@@ -24,6 +27,7 @@ export function assertLiveBrowserScriptParts(parts, exists = fs.existsSync) {
       throw new Error(`Live browser script part missing: ${part.name} (${part.path})`);
     }
   }
+
   return parts;
 }
 
@@ -70,6 +74,7 @@ export function assembleLiveBrowserScript({
 
   const body = parts.map((part) => {
     const file = part.file || path.basename(part.path || '');
+
     return `// --- impeccable live script part: ${part.name} (${file}) ---\n${part.source}`;
   }).join('\n');
 

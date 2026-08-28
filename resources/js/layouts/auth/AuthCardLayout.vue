@@ -18,33 +18,38 @@ defineProps<{
 
 <template>
     <div
-        class="flex min-h-svh flex-col items-center justify-center gap-6 bg-muted p-6 md:p-10"
+        class="relative flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10"
     >
-        <div class="flex w-full max-w-md flex-col gap-6">
+        <!--
+          The same soft green cast the landing page uses, so an auth screen
+          reads as the same room. Decorative, behind everything, ignored by
+          assistive technology.
+        -->
+        <div
+            aria-hidden="true"
+            class="pointer-events-none absolute inset-0 bg-[radial-gradient(50%_40%_at_50%_0%,color-mix(in_oklab,var(--primary)_12%,transparent),transparent_70%)]"
+        />
+
+        <div class="relative flex w-full max-w-md flex-col gap-6">
             <Link
                 :href="home()"
-                class="flex items-center gap-2 self-center font-medium"
+                class="flex items-center gap-2 self-center rounded-sm font-medium"
             >
-                <div class="flex h-9 w-9 items-center justify-center">
-                    <AppLogoIcon
-                        class="size-9 fill-current text-black dark:text-white"
-                    />
-                </div>
+                <AppLogoIcon class="size-9 fill-current text-foreground" />
+                <span class="sr-only">QUIZ AI</span>
             </Link>
 
-            <div class="flex flex-col gap-6">
-                <Card class="rounded-xl">
-                    <CardHeader class="px-10 pt-8 pb-0 text-center">
-                        <CardTitle class="text-xl">{{ title }}</CardTitle>
-                        <CardDescription>
-                            {{ description }}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent class="px-10 py-8">
-                        <slot />
-                    </CardContent>
-                </Card>
-            </div>
+            <Card>
+                <CardHeader class="px-8 text-center sm:px-10">
+                    <CardTitle class="text-xl">{{ title }}</CardTitle>
+                    <CardDescription>
+                        {{ description }}
+                    </CardDescription>
+                </CardHeader>
+                <CardContent class="px-8 sm:px-10">
+                    <slot />
+                </CardContent>
+            </Card>
         </div>
     </div>
 </template>

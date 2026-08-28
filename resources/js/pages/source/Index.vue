@@ -3,10 +3,17 @@ import { Form, Head, useForm, usePoll } from '@inertiajs/vue3';
 import { FileUp, RotateCcw, Trash2 } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import SourceController from '@/actions/App/Http/Controllers/Source/SourceController';
-import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    Card,
+    CardAction,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { index as sourcesIndex } from '@/routes/sources';
 import type { Source, SourceStatus, TopicSummary, UploadLimits } from '@/types';
@@ -150,89 +157,105 @@ function formatUploadedAt(uploadedAt: string | null): string {
 <template>
     <Head title="Sources" />
 
-    <div class="flex h-full flex-1 flex-col gap-8 p-4">
+    <div class="flex h-full flex-1 flex-col gap-6 p-4">
         <h1 class="sr-only">Sources</h1>
 
-        <section class="rounded-xl border p-6">
-            <Heading
-                variant="small"
-                title="Upload a document"
-                description="Every document you upload is turned into a set of quiz questions."
-            />
+        <Card>
+            <CardHeader>
+                <CardTitle>Upload a document</CardTitle>
+                <CardDescription>
+                    Every document you upload is turned into a set of quiz
+                    questions.
+                </CardDescription>
+            </CardHeader>
 
-            <form class="mt-6 space-y-4" @submit.prevent="upload">
-                <div class="grid gap-2">
-                    <Label for="file">Document</Label>
-                    <input
-                        id="file"
-                        ref="fileInput"
-                        type="file"
-                        name="file"
-                        :accept="acceptedExtensions.join(',')"
-                        class="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:mr-3 file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-                        @change="selectFile"
-                    />
-                    <InputError :message="form.errors.file" />
-                    <p class="text-sm text-muted-foreground">
-                        {{ acceptedExtensions.join(', ') }} up to
-                        {{ maxUploadMegabytes }} MB and
-                        {{ limits.maxPages }} pages.
-                    </p>
-                </div>
-
-                <p class="text-sm text-muted-foreground">
-                    The document is sent to our AI provider, which reads it and
-                    writes the questions. Do not upload anything you would not
-                    want to leave this application.
-                </p>
-
-                <progress
-                    v-if="form.progress"
-                    class="h-1 w-full"
-                    :value="form.progress.percentage"
-                    max="100"
-                >
-                    {{ form.progress.percentage }}%
-                </progress>
-
-                <Button
-                    type="submit"
-                    :disabled="form.processing || form.file === null"
-                    data-test="upload-source-button"
-                >
-                    <FileUp class="h-4 w-4" />
-                    {{ form.processing ? 'Uploading…' : 'Upload' }}
-                </Button>
-            </form>
-        </section>
-
-        <section v-if="isEmpty" class="rounded-xl border p-6">
-            <Heading
-                variant="small"
-                title="Nothing here yet"
-                description="Upload your first document above. Once it has been read, its questions become a topic you can study every day."
-            />
-        </section>
-
-        <template v-else>
-            <section v-if="sources.length > 0" class="space-y-4">
-                <div class="flex items-end justify-between gap-4">
-                    <Heading
-                        variant="small"
-                        title="Your documents"
-                        description="What you have uploaded and what came of it."
-                    />
+            <CardContent>
+                <form class="space-y-4" @submit.prevent="upload">
+                    <div class="grid gap-2">
+                        <Label for="file">Document</Label>
+                        <input
+                            id="file"
+                            ref="fileInput"
+                            type="file"
+                            name="file"
+                            :accept="acceptedExtensions.join(',')"
+                            class="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:mr-3 file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                            @change="selectFile"
+                        />
+                        <InputError :message="form.errors.file" />
+                        <p class="text-sm text-muted-foreground">
+                            {{ acceptedExtensions.join(', ') }} up to
+                            {{ maxUploadMegabytes }} MB and
+                            {{ limits.maxPages }} pages.
+                        </p>
+                    </div>
 
                     <p
-                        v-if="polling"
-                        class="shrink-0 text-sm text-muted-foreground"
-                        aria-live="polite"
+                        class="max-w-[70ch] text-sm leading-relaxed text-muted-foreground"
                     >
-                        Watching for updates…
+                        The document is sent to our AI provider, which reads it
+                        and writes the questions. Do not upload anything you
+                        would not want to leave this application.
                     </p>
-                </div>
 
-                <div class="overflow-x-auto rounded-xl border">
+                    <div
+                        v-if="form.progress"
+                        class="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+                        role="progressbar"
+                        aria-label="Upload progress"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        :aria-valuenow="form.progress.percentage"
+                    >
+                        <div
+                            class="h-full rounded-full bg-primary transition-[width] duration-150"
+                            :style="{
+                                width: `${form.progress.percentage ?? 0}%`,
+                            }"
+                        />
+                    </div>
+
+                    <Button
+                        type="submit"
+                        :disabled="form.processing || form.file === null"
+                        data-test="upload-source-button"
+                    >
+                        <FileUp class="size-4" />
+                        {{ form.processing ? 'Uploading…' : 'Upload' }}
+                    </Button>
+                </form>
+            </CardContent>
+        </Card>
+
+        <Card v-if="isEmpty">
+            <CardHeader>
+                <CardTitle>Nothing here yet</CardTitle>
+                <CardDescription class="max-w-[70ch] leading-relaxed">
+                    Upload your first document above. Once it has been read, its
+                    questions become a topic you can study every day.
+                </CardDescription>
+            </CardHeader>
+        </Card>
+
+        <template v-else>
+            <Card v-if="sources.length > 0" class="gap-0 overflow-hidden py-0">
+                <CardHeader class="border-b pt-6">
+                    <CardTitle>Your documents</CardTitle>
+                    <CardDescription>
+                        What you have uploaded and what came of it.
+                    </CardDescription>
+
+                    <CardAction v-if="polling">
+                        <p
+                            class="text-sm text-muted-foreground"
+                            aria-live="polite"
+                        >
+                            Watching for updates…
+                        </p>
+                    </CardAction>
+                </CardHeader>
+
+                <CardContent class="overflow-x-auto px-0">
                     <table class="w-full text-sm">
                         <thead class="border-b bg-muted/50 text-left">
                             <tr>
@@ -269,7 +292,7 @@ function formatUploadedAt(uploadedAt: string | null): string {
                             <tr
                                 v-for="source in sources"
                                 :key="source.id"
-                                class="border-b last:border-b-0"
+                                class="border-b transition-colors duration-150 last:border-b-0 hover:bg-muted/40"
                             >
                                 <td class="px-4 py-3 align-top">
                                     <p class="font-medium">
@@ -288,12 +311,12 @@ function formatUploadedAt(uploadedAt: string | null): string {
                                     {{ mediaTypeLabel(source.mediaType) }}
                                 </td>
                                 <td
-                                    class="px-4 py-3 align-top text-muted-foreground"
+                                    class="px-4 py-3 align-top text-muted-foreground tabular-nums"
                                 >
                                     {{ formatSize(source.sizeBytes) }}
                                 </td>
                                 <td
-                                    class="px-4 py-3 align-top text-muted-foreground"
+                                    class="px-4 py-3 align-top text-muted-foreground tabular-nums"
                                 >
                                     {{ source.pageCount ?? '—' }}
                                 </td>
@@ -321,7 +344,7 @@ function formatUploadedAt(uploadedAt: string | null): string {
                                     >
                                 </td>
                                 <td
-                                    class="px-4 py-3 align-top whitespace-nowrap text-muted-foreground"
+                                    class="px-4 py-3 align-top whitespace-nowrap text-muted-foreground tabular-nums"
                                 >
                                     {{ formatUploadedAt(source.uploadedAt) }}
                                 </td>
@@ -346,7 +369,7 @@ function formatUploadedAt(uploadedAt: string | null): string {
                                                 :disabled="processing"
                                                 :data-test="`retry-source-${source.id}`"
                                             >
-                                                <RotateCcw class="h-4 w-4" />
+                                                <RotateCcw class="size-4" />
                                                 <span class="sr-only"
                                                     >Try again</span
                                                 >
@@ -374,7 +397,7 @@ function formatUploadedAt(uploadedAt: string | null): string {
                                                 :disabled="processing"
                                                 :data-test="`delete-source-${source.id}`"
                                             >
-                                                <Trash2 class="h-4 w-4" />
+                                                <Trash2 class="size-4" />
                                                 <span class="sr-only"
                                                     >Delete</span
                                                 >
@@ -385,17 +408,18 @@ function formatUploadedAt(uploadedAt: string | null): string {
                             </tr>
                         </tbody>
                     </table>
-                </div>
-            </section>
+                </CardContent>
+            </Card>
 
-            <section v-if="topics.length > 0" class="space-y-4">
-                <Heading
-                    variant="small"
-                    title="Your topics"
-                    description="What your documents have added up to."
-                />
+            <Card v-if="topics.length > 0" class="gap-0 overflow-hidden py-0">
+                <CardHeader class="border-b pt-6">
+                    <CardTitle>Your topics</CardTitle>
+                    <CardDescription>
+                        What your documents have added up to.
+                    </CardDescription>
+                </CardHeader>
 
-                <div class="overflow-x-auto rounded-xl border">
+                <CardContent class="overflow-x-auto px-0">
                     <table class="w-full text-sm">
                         <thead class="border-b bg-muted/50 text-left">
                             <tr>
@@ -414,22 +438,26 @@ function formatUploadedAt(uploadedAt: string | null): string {
                             <tr
                                 v-for="topic in topics"
                                 :key="topic.id"
-                                class="border-b last:border-b-0"
+                                class="border-b transition-colors duration-150 last:border-b-0 hover:bg-muted/40"
                             >
                                 <td class="px-4 py-3 font-medium">
                                     {{ topic.name }}
                                 </td>
-                                <td class="px-4 py-3 text-muted-foreground">
+                                <td
+                                    class="px-4 py-3 text-muted-foreground tabular-nums"
+                                >
                                     {{ topic.quizCount }}
                                 </td>
-                                <td class="px-4 py-3 text-muted-foreground">
+                                <td
+                                    class="px-4 py-3 text-muted-foreground tabular-nums"
+                                >
                                     {{ topic.questionCount }}
                                 </td>
                             </tr>
                         </tbody>
                     </table>
-                </div>
-            </section>
+                </CardContent>
+            </Card>
         </template>
     </div>
 </template>

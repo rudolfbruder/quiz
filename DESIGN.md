@@ -78,6 +78,21 @@ it needs measuring first, not eyeballing.
 of them is wrong. The green carried over from `glyph-grid` unchanged — it is the one thing that system
 got unambiguously right.
 
+### The cast
+
+Public surfaces — the landing page and the seven auth screens — carry one soft radial wash of the green
+behind the top of the page:
+
+```
+bg-[radial-gradient(60%_55%_at_50%_-5%,color-mix(in_oklab,var(--primary)_13%,transparent),transparent_70%)]
+```
+
+It is the room's light source, not a highlight: no text sits on it that is not already legible on
+`--background`, it is `aria-hidden` and `pointer-events-none`, and it sits behind everything on a
+negative z-index. **One per page, on public surfaces only.** The signed-in application does not use it
+— a person working inside the product does not need atmosphere, and repeating it there would make the
+green stop meaning *act on this*.
+
 ### Destructive
 
 | Token | Hex | Use | Contrast |
@@ -124,8 +139,14 @@ writing a new one.
   off the cards. Not for decoration, not as a glow.
 - **Icons** — `@lucide/vue`. One icon set, `size-4` inline with text and `size-5` standalone, at the
   library's own stroke weight. Do not mix in a second set and do not substitute emoji.
-- **Cards** — the default container for a group of related things. One level deep; a card inside a card
-  means the grouping is wrong.
+- **Cards** — the default container for a group of related things, and the default is not optional. A
+  grouped block of content sits on a real card surface: `bg-card` fill, a border and `shadow-sm`, built
+  from `components/ui/card` rather than hand-rolled. A bordered box with no fill is not a card; a
+  section floating directly on the page ground with only a hairline rule above it is not one either.
+  Both read as unfinished on this palette and neither is the house style. One level deep; a card inside
+  a card means the grouping is wrong. Full-bleed content inside a card — a table, a list — uses
+  `class="gap-0 overflow-hidden py-0"` on the card and `class="px-0"` on the content, so the rows meet
+  the card's own edge instead of a second inset border.
 - **Focus** — the green ring on every interactive element. Never removed, never replaced by a colour
   change alone.
 
@@ -159,6 +180,8 @@ Everything on the `glyph-grid` list is gone: `resources/js/lib/glyph.ts`,
 ## Open
 
 - No logo or wordmark exists. QUIZ AI currently sets as type.
+- The status alert (`AlertStatus.vue`) is deliberately neutral, not green. Green is the brand and the
+  call to action; a confirmation earns a check icon and a sentence instead of a second green.
 - The quiz-answering surfaces — question, options, result, empty state — have no components yet. They
   are the first real test of this system. With a red available, correctness is straightforward: a
   correct option is green-marked and a wrong one is red-marked, each with an icon and a word.

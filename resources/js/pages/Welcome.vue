@@ -2,6 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { ArrowRight } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { dashboard, login, register } from '@/routes';
 
 /**
@@ -39,6 +40,9 @@ const questions = [
             },
         ],
     },
+];
+
+const answers = [
     {
         ask: 'How much of my day?',
         answer: 'Five questions per topic, once a day. Anything you were asked in the last three days is held back, so you are not re-reading yesterday. Refreshing the page does not reshuffle the set — the same five are yours until tomorrow.',
@@ -57,9 +61,23 @@ const questions = [
 <template>
     <Head title="QUIZ AI" />
 
-    <div class="min-h-screen bg-background text-foreground">
-        <div class="mx-auto w-full max-w-5xl px-6 lg:px-10">
-            <header class="flex items-center justify-between py-6">
+    <div class="relative min-h-screen bg-background text-foreground">
+        <!--
+          The one atmospheric moment: a single soft green cast behind the hero,
+          reading as the light source the palette is named for. Decorative only,
+          so it is hidden from assistive technology and sits behind everything.
+        -->
+        <div
+            aria-hidden="true"
+            class="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[40rem] bg-[radial-gradient(60%_55%_at_50%_-5%,color-mix(in_oklab,var(--primary)_13%,transparent),transparent_70%)]"
+        />
+
+        <header
+            class="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur-sm"
+        >
+            <div
+                class="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-4 lg:px-10"
+            >
                 <span class="text-sm font-semibold">QUIZ AI</span>
 
                 <nav class="flex items-center gap-6 text-sm">
@@ -85,12 +103,14 @@ const questions = [
                         </Link>
                     </template>
                 </nav>
-            </header>
+            </div>
+        </header>
 
+        <div class="mx-auto w-full max-w-5xl px-6 lg:px-10">
             <main>
                 <section class="rise-in py-20 lg:py-28">
                     <h1
-                        class="max-w-[16ch] text-4xl font-semibold tracking-tight text-balance sm:text-5xl lg:text-6xl"
+                        class="max-w-[16ch] text-5xl font-semibold tracking-tight text-balance sm:text-6xl lg:text-7xl"
                     >
                         Remember what you upload
                     </h1>
@@ -112,30 +132,30 @@ const questions = [
                     </Button>
                 </section>
 
-                <dl>
-                    <div
-                        v-for="item in questions"
-                        :key="item.ask"
-                        class="grid gap-x-12 gap-y-4 border-t border-border py-10 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] lg:py-14"
-                    >
-                        <dt
-                            class="text-lg font-medium text-balance md:text-base"
-                        >
-                            {{ item.ask }}
-                        </dt>
+                <div class="space-y-6 pb-6">
+                    <Card v-for="item in questions" :key="item.ask">
+                        <CardHeader>
+                            <CardTitle class="text-lg">
+                                {{ item.ask }}
+                            </CardTitle>
+                        </CardHeader>
 
-                        <dd class="space-y-8">
+                        <CardContent class="space-y-6">
                             <p
-                                class="max-w-[68ch] text-sm leading-relaxed text-muted-foreground"
+                                class="max-w-[70ch] text-sm leading-relaxed text-muted-foreground"
                             >
                                 {{ item.answer }}
                             </p>
 
                             <dl
                                 v-if="item.facts"
-                                class="flex flex-wrap gap-x-12 gap-y-4"
+                                class="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3"
                             >
-                                <div v-for="fact in item.facts" :key="fact.term">
+                                <div
+                                    v-for="fact in item.facts"
+                                    :key="fact.term"
+                                    class="bg-muted px-4 py-3"
+                                >
                                     <dt class="text-xs text-muted-foreground">
                                         {{ fact.term }}
                                     </dt>
@@ -147,42 +167,69 @@ const questions = [
                                 </div>
                             </dl>
 
-                            <ol v-if="item.steps" class="space-y-3">
+                            <ol
+                                v-if="item.steps"
+                                class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-muted"
+                            >
                                 <li
                                     v-for="(step, index) in item.steps"
                                     :key="step.name"
-                                    class="flex gap-4 text-sm"
+                                    class="flex flex-wrap gap-x-4 gap-y-1 px-4 py-3 text-sm"
                                 >
                                     <span
                                         class="w-4 shrink-0 text-muted-foreground tabular-nums"
                                     >
                                         {{ index + 1 }}
                                     </span>
-                                    <span class="font-medium">{{
-                                        step.name
-                                    }}</span>
-                                    <span class="text-muted-foreground">{{
-                                        step.body
-                                    }}</span>
+                                    <span class="font-medium">
+                                        {{ step.name }}
+                                    </span>
+                                    <span class="text-muted-foreground">
+                                        {{ step.body }}
+                                    </span>
                                 </li>
                             </ol>
-                        </dd>
+                        </CardContent>
+                    </Card>
+
+                    <div class="grid gap-6 md:grid-cols-3">
+                        <Card v-for="item in answers" :key="item.ask">
+                            <CardHeader>
+                                <CardTitle class="text-base">
+                                    {{ item.ask }}
+                                </CardTitle>
+                            </CardHeader>
+
+                            <CardContent>
+                                <p
+                                    class="text-sm leading-relaxed text-muted-foreground"
+                                >
+                                    {{ item.answer }}
+                                </p>
+                            </CardContent>
+                        </Card>
                     </div>
-                </dl>
+                </div>
 
-                <section
-                    class="flex flex-wrap items-center justify-between gap-8 border-t border-border py-16 lg:py-20"
-                >
-                    <h2 class="max-w-[24ch] text-2xl font-semibold text-balance">
-                        One document. A minute a day.
-                    </h2>
+                <section class="py-16 lg:py-20">
+                    <Card>
+                        <CardContent
+                            class="flex flex-wrap items-center justify-between gap-8 py-4"
+                        >
+                            <h2
+                                class="max-w-[24ch] text-2xl font-semibold text-balance"
+                            >
+                                One document. A minute a day.
+                            </h2>
 
-                    <Button as-child size="lg">
-                        <Link :href="register()">
-                            Start a topic
-                            <ArrowRight aria-hidden="true" />
-                        </Link>
-                    </Button>
+                            <Button as-child size="lg">
+                                <Link :href="register()">
+                                    Start a topic
+                                    <ArrowRight aria-hidden="true" />
+                                </Link>
+                            </Button>
+                        </CardContent>
+                    </Card>
                 </section>
             </main>
 

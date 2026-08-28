@@ -21,8 +21,13 @@ import zlib from 'node:zlib';
 
 function arg(name, fallback = null) {
   const i = process.argv.indexOf(`--${name}`);
-  if (i === -1) return fallback;
+
+  if (i === -1) {
+return fallback;
+}
+
   const v = process.argv[i + 1];
+
   return v && !v.startsWith('--') ? v : fallback;
 }
 
@@ -41,10 +46,12 @@ function arg(name, fallback = null) {
 // FNV-1a 32-bit: tiny, dependency-free, stable across runs and platforms.
 function hash32(str) {
   let h = 0x811c9dc5;
+
   for (let i = 0; i < str.length; i++) {
     h ^= str.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
+
   return h >>> 0;
 }
 
@@ -54,13 +61,30 @@ function hslToRgb(hDeg, s, l) {
   const p = 2 * l - q;
   const hue = (t) => {
     let tt = t;
-    if (tt < 0) tt += 1;
-    if (tt > 1) tt -= 1;
-    if (tt < 1 / 6) return p + (q - p) * 6 * tt;
-    if (tt < 1 / 2) return q;
-    if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+
+    if (tt < 0) {
+tt += 1;
+}
+
+    if (tt > 1) {
+tt -= 1;
+}
+
+    if (tt < 1 / 6) {
+return p + (q - p) * 6 * tt;
+}
+
+    if (tt < 1 / 2) {
+return q;
+}
+
+    if (tt < 2 / 3) {
+return p + (q - p) * (2 / 3 - tt) * 6;
+}
+
     return p;
   };
+
   return [hue(h + 1 / 3), hue(h), hue(h - 1 / 3)].map((c) => Math.round(c * 255));
 }
 
@@ -75,11 +99,13 @@ function palette(prompt) {
   const bands = 2 + (h >>> 9) % 2; // 2 or 3
   const spread = 40 + (h >>> 3) % 120;
   const out = [];
+
   for (let i = 0; i < bands; i++) {
     const hue = base + i * spread;
     const light = 0.32 + ((h >>> (i * 5)) % 40) / 100; // 0.32 - 0.71
     out.push(hslToRgb(hue, 0.55, light));
   }
+
   return out;
 }
 
@@ -93,22 +119,34 @@ function svgFake(prompt, [w, h]) {
   const words = String(prompt).replace(/\s+/g, ' ').trim().split(' ');
   const lines = [];
   let cur = '';
+
   for (const word of words) {
     if ((cur + ' ' + word).trim().length > perLine) {
-      if (cur) lines.push(cur);
+      if (cur) {
+lines.push(cur);
+}
+
       cur = word;
     } else {
       cur = (cur + ' ' + word).trim();
     }
-    if (lines.length >= 10) break;
+
+    if (lines.length >= 10) {
+break;
+}
   }
-  if (cur && lines.length < 11) lines.push(cur);
+
+  if (cur && lines.length < 11) {
+lines.push(cur);
+}
+
   const escape = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   const fontSize = Math.round(w / 24);
   const startY = h / 2 - ((lines.length - 1) * fontSize * 1.3) / 2;
   const text = lines
     .map((line, i) => `<text x="${w / 2}" y="${Math.round(startY + i * fontSize * 1.3)}" font-family="Helvetica, Arial, sans-serif" font-size="${fontSize}" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">${escape(line)}</text>`)
     .join('');
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
   <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">${stops}</linearGradient></defs>
@@ -126,10 +164,15 @@ function svgFake(prompt, [w, h]) {
 // "SYNTHETIC" bytes downstream tools look for.
 function crc32(buf) {
   let c = 0xffffffff;
+
   for (let i = 0; i < buf.length; i++) {
     c ^= buf[i];
-    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+
+    for (let k = 0; k < 8; k++) {
+c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+}
   }
+
   return (c ^ 0xffffffff) >>> 0;
 }
 
@@ -140,6 +183,7 @@ function pngChunk(type, data) {
   len.writeUInt32BE(data.length, 0);
   const crc = Buffer.alloc(4);
   crc.writeUInt32BE(crc32(body), 0);
+
   return Buffer.concat([len, body, crc]);
 }
 
@@ -149,10 +193,12 @@ function pngFake(prompt, [w, h]) {
   // Raw image: each scanline prefixed with a 0 filter byte, RGB pixels.
   const stride = w * 3;
   const raw = Buffer.alloc(h * (stride + 1));
+
   for (let y = 0; y < h; y++) {
     const rowStart = y * (stride + 1);
     raw[rowStart] = 0;
     const [r, g, b] = colors[Math.min(colors.length - 1, Math.floor(y / bandH))];
+
     for (let x = 0; x < w; x++) {
       const p = rowStart + 1 + x * 3;
       raw[p] = r;
@@ -160,6 +206,7 @@ function pngFake(prompt, [w, h]) {
       raw[p + 2] = b;
     }
   }
+
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(w, 0);
   ihdr.writeUInt32BE(h, 4);
@@ -171,6 +218,7 @@ function pngFake(prompt, [w, h]) {
     Buffer.from([0]),
     Buffer.from(`SYNTHETIC COMP: ${String(prompt).replace(/\s+/g, ' ').trim()}`, 'latin1'),
   ]);
+
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     pngChunk('IHDR', ihdr),
@@ -182,7 +230,11 @@ function pngFake(prompt, [w, h]) {
 
 function parseSize(sizeStr) {
   const m = String(sizeStr).match(/^(\d+)x(\d+)$/);
-  if (!m) return [1536, 1024];
+
+  if (!m) {
+return [1536, 1024];
+}
+
   return [Number(m[1]), Number(m[2])];
 }
 
@@ -190,10 +242,12 @@ if (process.env.IMPECCABLE_IMAGE_GEN_FAKE) {
   const fakePromptFile = arg('prompt-file');
   const fakePrompt = fakePromptFile ? fs.readFileSync(fakePromptFile, 'utf8') : arg('prompt');
   const fakeOut = arg('out');
+
   if (!fakePrompt || !fakeOut) {
     console.error('generate-image: --prompt (or --prompt-file) and --out are required.');
     process.exit(1);
   }
+
   const dims = parseSize(arg('size', '1536x1024'));
   const bytes = fakeOut.endsWith('.svg')
     ? Buffer.from(svgFake(fakePrompt, dims), 'utf8')
@@ -204,17 +258,21 @@ if (process.env.IMPECCABLE_IMAGE_GEN_FAKE) {
 }
 
 const key = process.env.OPENAI_API_KEY;
+
 if (!key) {
   console.error('generate-image: OPENAI_API_KEY is not set; use the harness-native image tool instead.');
   process.exit(1);
 }
+
 const promptFile = arg('prompt-file');
 const prompt = promptFile ? fs.readFileSync(promptFile, 'utf8') : arg('prompt');
 const out = arg('out');
+
 if (!prompt || !out) {
   console.error('generate-image: --prompt (or --prompt-file) and --out are required.');
   process.exit(1);
 }
+
 const size = arg('size', '1536x1024');
 const quality = arg('quality', 'medium');
 // Reference images (--ref, repeatable): route through the edits endpoint,
@@ -224,13 +282,18 @@ const quality = arg('quality', 'medium');
 // reference carries palette, type, and component character.
 const refs = (() => {
   const found = [];
+
   for (let i = 0; i < process.argv.length; i += 1) {
-    if (process.argv[i] === '--ref' && process.argv[i + 1] && !process.argv[i + 1].startsWith('--')) found.push(process.argv[i + 1]);
+    if (process.argv[i] === '--ref' && process.argv[i + 1] && !process.argv[i + 1].startsWith('--')) {
+found.push(process.argv[i + 1]);
+}
   }
+
   return found;
 })();
 
 let response;
+
 if (refs.length) {
   const form = new FormData();
   form.append('model', 'gpt-image-2');
@@ -238,11 +301,13 @@ if (refs.length) {
   form.append('size', size);
   form.append('quality', quality);
   form.append('n', '1');
+
   for (const ref of refs) {
     const bytes = fs.readFileSync(ref);
     const type = ref.endsWith('.png') ? 'image/png' : ref.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
     form.append('image[]', new Blob([bytes], { type }), ref.split('/').pop());
   }
+
   response = await fetch('https://api.openai.com/v1/images/edits', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}` },
@@ -255,17 +320,22 @@ if (refs.length) {
     body: JSON.stringify({ model: 'gpt-image-2', prompt, size, quality, n: 1 }),
   });
 }
+
 if (!response.ok) {
   console.error(`generate-image: API error ${response.status}: ${(await response.text()).slice(0, 300)}`);
   process.exit(1);
 }
+
 const json = await response.json();
 const b64 = json?.data?.[0]?.b64_json;
+
 if (!b64) {
   console.error('generate-image: no image in response');
   process.exit(1);
 }
+
 fs.writeFileSync(out, Buffer.from(b64, 'base64'));
+
 // The prompt travels with the asset: embedded in the file itself (EXIF-class
 // metadata via embed-prompt.mjs) so intent survives copies across harnesses,
 // plus a sidecar for anything that indexes rather than opens the image.
@@ -274,4 +344,5 @@ try {
   spawnSync(process.execPath, [new URL('./embed-prompt.mjs', import.meta.url).pathname, out, '--prompt', prompt], { stdio: 'ignore' });
   fs.writeFileSync(`${out}.json`, JSON.stringify({ prompt, createdAt: new Date().toISOString(), tool: 'generate-image.mjs', model: 'gpt-image-2', ...(refs.length ? { refs } : {}) }, null, 2));
 } catch { /* embedding is best-effort */ }
+
 console.log(`IMAGE: ${out} (${size}, ${quality}, gpt-image-2, billed to your OpenAI key); prompt embedded + sidecar at ${out}.json`);

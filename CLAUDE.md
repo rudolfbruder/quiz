@@ -22,7 +22,9 @@ receives a small daily quiz — questions they have not seen recently — and no
 
 ## Hard limits (enforce, do not "handle gracefully" by silently truncating)
 
-- Accepted types: PDF, DOCX, TXT/MD. Text-bearing documents only for now — no image-only scans, no OCR.
+- Accepted types: PDF, TXT/MD. Text-bearing documents only for now — no image-only scans, no OCR.
+  DOCX is **not** accepted: OpenAI will not take it as a document attachment, so supporting it means a
+  local parsing dependency and a second code path. That is its own change, not a config edit.
 - Maximum **25 pages** per document. Reject above that with a validation error naming the real page count.
 - One generation run per source at a time. A source already `processing` cannot be re-queued.
 

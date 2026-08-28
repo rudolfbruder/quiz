@@ -1,36 +1,31 @@
 ## Context
 
-`add-domain-foundation` shipped the schema, seeded fixtures and a tested `ReviewScheduler`, and no
-caller for any of it. See `proposal.md` — Why. Three constraints shape everything below.
+`add-daily-selection` decides which questions a learner gets; this change serves them, records the
+answers and feeds the grades back to `ReviewScheduler`, which still has no caller. See `proposal.md` —
+Why. Three constraints shape everything below.
 
 **The scheduler is pure and stays pure.** It takes prior state, a grade and an explicit moment, and
 returns a decision. Nothing in this change may push a clock read, a query or a model into it.
 
-**The design system has open questions that this change has to close.** `DESIGN.md` says the
-quiz-answering surfaces are "the first real test of this system" and lists three things it does not
-answer: how correctness reads with a single ink and no red, where the longest prose in the product
-goes, and whether the learner sees their retention field mid-quiz. Those are settled here.
-
-**`DESIGN.md` is deliberately ahead of the code.** Its ramp table was re-derived against the
-scheduler's retrievability curve while `resources/js/lib/glyph.ts` still runs the superseded cooldown.
-Correcting that is part of this change, and `DESIGN.md` is the specification for it.
+**The visual system is settled elsewhere.** `glyph-grid` was retired by
+`retire-glyph-grid-theme`, which deleted `resources/js/lib/glyph.ts` and `resources/js/components/glyph/`
+and replaced the token set. `DESIGN.md` (`phosphor-dark`) and the `visual-system` spec are the
+authority on appearance; this change reads them at build time rather than restating them here, and
+decides only what is specific to answering a question.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- One owner for daily-set composition, unit-testable without HTTP.
 - Give `ReviewScheduler` its caller, without leaking persistence into it.
-- Close the three open `glyph-grid` questions with decisions a later surface can inherit.
-- Make the signed-in retention field incapable of drifting from the server's maths.
+- Answer what is specific to these surfaces and not covered by `DESIGN.md`: where the explanation goes, and what a day with nothing due looks like.
 - Never send an option's correctness to the browser before the learner has answered it.
 
 **Non-Goals:**
 
-- Optimising selection. One topic holds tens to low hundreds of questions; a straightforward indexed
-  query is correct and fast, and the schema already carries the denormalised columns for it.
+- Choosing the day's questions. That is `add-daily-selection`, and this change calls it.
 - A self-reported difficulty control. Grading is derived from the answer alone — see below.
-- Migrating every starter-kit surface. Only what the daily journey walks through.
+- Any styling migration. These surfaces use the tokens the starter kit already uses.
 
 ## Decisions
 
@@ -62,37 +57,6 @@ second tap on every question is a third more interaction for a signal we can app
 The mapping lives as `Rating::fromAnswer(bool $correct, ?int $milliseconds, int $fastThresholdMs)`,
 with the threshold passed in rather than read from config inside the enum, so it stays pure and
 testable. If `Hard` is ever awarded, this is the one place that changes.
-
-### Selection is one query, ordered, then padded
-
-```
-   ┌─ due questions ────────────────────────────────────┐
-   │ review_states where user, topic, due_at <= now      │
-   │ order by due_at asc, question_id asc                │  ← index (user_id, topic_id, due_at)
-   └────────────────────────────────────────────────────┘
-                    │  take up to daily_question_count
-                    ▼
-   ┌─ new questions ────────────────────────────────────┐
-   │ questions in topic with no review state for user    │
-   │ order by quiz_id asc, position asc                  │
-   └────────────────────────────────────────────────────┘
-                    │  take min(remaining slots, max_new_per_day)
-                    ▼
-              the day's set, in that order
-```
-
-Both orderings are total and stable, so the result is deterministic without a seed, a hash or a shuffle
-— which is what the spec's stability requirement needs. New questions are introduced in authoring
-order (`quiz`, then `position`) rather than at random, so a learner meets the material roughly the way
-the source presents it, and introduction cannot restart or reshuffle between days.
-
-The due branch fills first, so a backlog suppresses new material with no separate rule for it. That is
-the standard spaced-repetition posture — stop introducing while you are behind — arriving as a
-consequence of the ordering rather than as a policy someone has to remember.
-
-Alternative considered: interleaving new questions among due ones for variety. Rejected — it would
-either grow the daily set or displace a due question, and displacing a due question is the one thing
-selection must not do.
 
 ### Determinism is storage, not recomputation
 
@@ -138,35 +102,16 @@ sub-day learning steps. The scheduler keeps returning the true value; `ApplyRevi
 due moment* at the following day. Stability is not floored, only the due date, so the maths stays
 honest and only the serving cadence is respected.
 
-### Correctness reads as ink plus a word, never ink alone
+### Correctness is marked, labelled, and legible without colour
 
-`DESIGN.md` forbids a second hue and forbids `ink-40` and below from carrying meaning. So correctness
-cannot be a colour and cannot be a fade alone.
+After answering, the correct option and the learner's own choice are both marked. The marking follows
+whatever `DESIGN.md` and the `visual-system` spec specify at build time — read them then, not now.
 
-```
-  ── before answering ────────────────────────────────────
-     ·  Sardinia                        all options ink-80
-     ·  Corsica                         gutter empty
-     ·  Sicily                          focus ring = 1px ink-100
-     ·  Malta
-
-  ── after answering wrongly ─────────────────────────────
-  ┌ INCORRECT ────────────────────────  ink-100, rule above  (DESIGN: an error is a
-  │                                                            full-ink thing with a rule)
-  │  -  Sardinia          YOUR ANSWER   ink-60 + the words
-  │  .  Corsica                         ink-40, decorative
-  │  @  Sicily            CORRECT       ink-100
-  │  .  Malta                           ink-40
-  └────────────────────────────────────
-```
-
-The gutter uses ramp characters as themselves — `@` for the answer, `-` for what the learner chose, `.`
-for the options that were never in play. `DESIGN.md` already permits typed characters used as typing.
-Every meaningful state carries a word beside the ink, so the ramp is reinforcement rather than the
-message, and nothing a learner must read sits below `ink-60`.
-
-Alternative considered: fading the wrong choice to `ink-40` for the drama of it. Rejected — it reads
-well and breaks the contrast floor on the one line the learner most wants to re-read.
+The requirement this change adds on top is the one an options list makes non-obvious: correct and
+incorrect options sit adjacent by construction, so whatever distinguishes them must survive being read
+in greyscale. Each marked option carries an icon and a word ("Correct answer", "Your answer") and the
+colour reinforces them. `visual-system`'s requirement "Colour never carries meaning alone" makes that
+mandatory rather than a nicety.
 
 ### The explanation is always shown, never disclosed behind a control
 
@@ -179,42 +124,15 @@ anything, and `PRODUCT.md` principle 1 puts the returning learner above the tidy
 explanations run three or four lines at this measure, which is exactly the paragraph length the type
 scale is specified for, so the tension is smaller in practice than it looks in principle.
 
-### The field is not on the answering surface
+### The answering surface shows one question and its progress
 
-The retention field appears on the topic surface before a session and on the result surface after it,
-and never while a question is open.
+There is no retention visualisation to place — `retire-glyph-grid-theme` deleted the component that drew
+it. The decision outlives its subject: if one returns, it belongs on the topic surface before a session
+and the result surface after it, never beside an open question. Updating live would show the learner the
+effect of an answer before they have seen whether it was right; not updating would show stale data
+beside fresh.
 
-```
-   topic ──▶ [ field: where you stand ]
-     │
-     ▼
-   quiz  ──▶ [ one question. progress as five ramp cells. nothing else. ]
-     │
-     ▼
-   result ─▶ [ field again: what changed today ]
-```
-
-`DESIGN.md` allows one authored moment per surface, and mid-question the field competes with the only
-thing that matters. It is also dishonest either way: updating live shows the learner the cell they just
-lit before they have seen whether they were right, and not updating shows a stale picture beside fresh
-information.
-
-Progress keeps the world's grammar without being the field — five cells, one per question, filling as
-they are answered. Field-adjacent, not the field.
-
-### The signed-in field is computed server-side; only the marketing simulation runs in TypeScript
-
-`DESIGN.md` warns that `simulateField` is a display-only reimplementation and that "if the two ever
-disagree, the action wins". Rather than maintain that warning, the signed-in field is not a
-reimplementation at all: the server computes each question's ink level from `ReviewScheduler`'s own
-retrievability function and sends levels, not stabilities. The Vue component renders integers.
-
-`simulateField` survives only for the signed-out simulation, where there is no learner to read, and is
-re-derived against the same curve so the marketing picture and the product agree in shape. Drift is
-then possible only in a picture of nobody.
-
-`RAMP_MEANING` is rewritten to the retrievability readings in `DESIGN.md`, and `RetentionField`'s
-`cooling` readout becomes a due count.
+The answering surface carries progress — question three of five — and nothing further.
 
 ### Correctness never reaches the browser before it is earned
 
@@ -223,17 +141,11 @@ only for questions the current attempt has already answered. This is a serialisa
 one: an Inertia page ships its props as JSON in the document, so "the UI does not show it" is not a
 control.
 
-### World migration is limited to the daily journey
+### No styling migration is sequenced behind this change
 
-`Dashboard`, the application shell it renders inside, and `Login` move to `glyph-grid`. `Register`,
-password reset, email verification, two-factor, passkeys and settings stay on the incumbent shadcn
-tokens.
-
-`DESIGN.md` says to migrate a surface when you build on it, not speculatively, and this is the smallest
-cut that leaves no seam inside `Welcome → Login → Dashboard → quiz`. It does leave a seam at
-`Login → Register` and at settings, which is a known and stated debt rather than an oversight. This
-narrows what `proposal.md` describes as "the auth surfaces" to the one auth surface the daily journey
-actually crosses.
+`retire-glyph-grid-theme` replaced the token set every shadcn component in the starter kit already
+consumes, so these surfaces inherit the current theme by being built from those components. There is no
+seam to close and no migration change to wait for.
 
 ## Risks / Trade-offs
 
@@ -246,15 +158,14 @@ still reads why. The append-only log means a future grading change can be replay
 `Easy` only ever promotes. The worst case of a badly tuned threshold is a question pushed further out
 than it deserved, which the next lapse corrects.
 
-**The quiz surfaces are the first prose-heavy test of a world built for density.** → This is the real
-risk in the change and it cannot be designed away in advance. The mitigation is order of work: build
-the question surface first with the seeded Roman Republic content, which is real prose at real length,
-and correct the type scale in `DESIGN.md` if it does not hold. Do not build five surfaces on an
-unproven one.
+**These are the first product surfaces built on the current theme, while that theme is still being
+reworked.** → Build the question surface first, against the seeded Roman Republic content, which is real
+prose at real length. Re-read `DESIGN.md` at that point rather than trusting this document's summary of
+it, and do not build the remaining surfaces on an unproven one.
 
-**Two selection branches can both come back empty.** → That is a designed state, not a failure: the
-spec requires the learner be told nothing is due and when the next question falls due. It needs the
-earliest future `due_at` as a second query, which is cheap on the same index.
+**A day can legitimately have nothing in it.** → A designed state, not a failure. `add-daily-selection`
+already returns the earliest future due moment for exactly this, so the surface explains the day rather
+than rendering blank.
 
 **Everything is exercised against seeded data only.** → Upload and generation are not in this change,
 so the only material is the seeder's two quizzes in one topic for one demo user. Tests must use
@@ -267,9 +178,8 @@ Purely additive. No schema change, so nothing to roll back but code. Two configu
 to `config/review.php`: a cap on new questions per day, and the daily interval floor. Both have
 defaults, so a deployment that misses them still behaves.
 
-`CLAUDE.md` and `PRODUCT.md` are edited to replace the three-day cooldown with the selection rule
-specified here. `DESIGN.md` is already correct and carries a note saying the code has not caught up;
-that note is removed as part of the ramp work.
+`CLAUDE.md` and `PRODUCT.md` are edited by `add-daily-selection`, not here. `DESIGN.md` needs no change
+for this work.
 
 ## Open Questions
 

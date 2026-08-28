@@ -92,13 +92,13 @@
 import crypto from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readCompositionCatalog } from './lib/composition-catalog.mjs';
 import {
   approvedPoolRevision,
   readConceptCatalog,
   validateConceptCatalog,
   WELL_TIERS,
 } from './lib/concept-catalog.mjs';
-import { readCompositionCatalog } from './lib/composition-catalog.mjs';
 import {
   COMPOSITION_GRAINS,
   COMPOSITION_PLATFORMS,
@@ -119,23 +119,32 @@ const API_TIMEOUT_MS = Number(process.env.IMPECCABLE_API_TIMEOUT || 4000);
 // network degrades after one timeout total, never one timeout per call.
 let apiDeadline = null;
 function apiBudgetMs() {
-  if (apiDeadline === null) apiDeadline = Date.now() + API_TIMEOUT_MS;
+  if (apiDeadline === null) {
+apiDeadline = Date.now() + API_TIMEOUT_MS;
+}
+
   return Math.max(0, apiDeadline - Date.now());
 }
 
 const localStates = new Map();
 function loadLocal(catalogDir = CATALOG_DIR) {
-  if (localStates.has(catalogDir)) return localStates.get(catalogDir);
+  if (localStates.has(catalogDir)) {
+return localStates.get(catalogDir);
+}
+
   let localState;
+
   try {
     const catalogState = readConceptCatalog(
       join(catalogDir, 'concept-ingredients.json'),
       join(catalogDir, 'concept-reviews.json')
     );
     const validation = validateConceptCatalog(catalogState.catalog, catalogState.reviewData);
+
     if (validation.errors.length > 0) {
       throw new Error(`invalid catalog: ${validation.errors.join('; ')}`);
     }
+
     const compositionState = readCompositionCatalog(
       join(catalogDir, 'composition-ingredients.json'),
       join(catalogDir, 'composition-reviews.json')
@@ -147,25 +156,40 @@ function loadLocal(catalogDir = CATALOG_DIR) {
   } catch {
     localState = null;
   }
+
   localStates.set(catalogDir, localState);
+
   return localState;
 }
 
 function requireLocalConcepts() {
   const local = loadLocal();
+
   if (!local) {
     throw new Error('concept-seed: no local catalog (set IMPECCABLE_CATALOG_DIR or pass sourceConcepts)');
   }
+
   return local;
 }
 
 async function fetchRoll({ scope, key, mode, grain, platform, reroll }) {
   const params = new URLSearchParams({ scope, key, reroll: String(reroll) });
-  if (mode) params.set('mode', mode);
-  if (grain) params.set('grain', grain);
-  if (platform) params.set('platform', platform);
+
+  if (mode) {
+params.set('mode', mode);
+}
+
+  if (grain) {
+params.set('grain', grain);
+}
+
+  if (platform) {
+params.set('platform', platform);
+}
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), apiBudgetMs());
+
   try {
     // Race the budget explicitly: abort signals do not reliably cancel the
     // TCP connect phase, so a blackholed route would otherwise stall ~10s.
@@ -173,10 +197,21 @@ async function fetchRoll({ scope, key, mode, grain, platform, reroll }) {
       fetch(`${API_BASE}/roll?${params}`, { signal: controller.signal }),
       new Promise(resolveTimeout => setTimeout(() => resolveTimeout(null), apiBudgetMs())),
     ]);
-    if (!response) return null;
-    if (!response.ok) return null;
+
+    if (!response) {
+return null;
+}
+
+    if (!response.ok) {
+return null;
+}
+
     const roll = await response.json();
-    if (!Array.isArray(roll.challengers) || roll.challengers.length === 0) return null;
+
+    if (!Array.isArray(roll.challengers) || roll.challengers.length === 0) {
+return null;
+}
+
     return roll;
   } catch {
     return null;
@@ -198,14 +233,30 @@ function telemetryDisabled() {
 // Fire-and-forget; never fails the caller.
 const PING_KINDS = new Set(['assigned', 'pick', 'challenger', 'canon']);
 export async function pingChosen({ chosenId, key, scope, mode, kind, register }) {
-  if (telemetryDisabled()) return false;
-  if (kind && !PING_KINDS.has(kind)) return false;
-  if (register && register !== 'safer' && register !== 'bolder') return false;
+  if (telemetryDisabled()) {
+return false;
+}
+
+  if (kind && !PING_KINDS.has(kind)) {
+return false;
+}
+
+  if (register && register !== 'safer' && register !== 'bolder') {
+return false;
+}
+
   // Legacy shape: a bare challenger id with no kind stays a valid ping.
-  if (!chosenId && !kind) return false;
-  if ((kind === 'challenger' || !kind) && !chosenId) return false;
+  if (!chosenId && !kind) {
+return false;
+}
+
+  if ((kind === 'challenger' || !kind) && !chosenId) {
+return false;
+}
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), apiBudgetMs());
+
   try {
     await fetch(`${API_BASE}/chosen`, {
       method: 'POST',
@@ -220,6 +271,7 @@ export async function pingChosen({ chosenId, key, scope, mode, kind, register })
       }),
       signal: controller.signal,
     });
+
     return true;
   } catch {
     return false;
@@ -234,6 +286,7 @@ export function renderChallenger(concept, index) {
   const system = concept.system.map(rule => `       - ${rule}`).join('\n');
   const board = concept.cardBoard || `${CARD_BASE}/${concept.id}.webp`;
   const hero = concept.cardHero || `${CARD_BASE}/${concept.id}-hero.webp`;
+
   return `  ${index + 1}. ${concept.form}
      SOURCE ID: ${concept.id}
      CREATIVE SPARK: ${concept.spark}
@@ -245,6 +298,7 @@ ${system}
 
 export function renderComposition(composition, index = null) {
   const grammar = composition.grammar.map(rule => `       - ${rule}`).join('\n');
+
   return `  ${index == null ? '' : `${index + 1}. `}${composition.form}
      SOURCE ID: ${composition.id}
      SPARK: ${composition.spark}
@@ -264,6 +318,7 @@ function driveSelection(generator) {
 
 export function dealCompositions({ scope, key, reroll = 0, mode = null, grain = null, platform = null, sourceCompositions = null, count = 3 }) {
   const compositions = sourceCompositions ?? requireLocalConcepts().compositions;
+
   return driveSelection(selectApprovedCompositionsCore({ scope, key, reroll, mode, grain, platform, compositions, count }));
 }
 
@@ -281,6 +336,7 @@ export function selectApprovedComposition(options) {
 export function selectApprovedChallengers({ scope, key, reroll = 0, mode = null, sourceConcepts = null }) {
   const source = sourceConcepts ?? requireLocalConcepts().concepts;
   const { approved, picks } = driveSelection(selectApprovedChallengersCore({ scope, key, reroll, mode, concepts: source }));
+
   return {
     approved,
     picks,
@@ -306,34 +362,44 @@ export function renderConceptSeed({
   if (scope !== 'surface' && scope !== 'direction') {
     throw new Error('concept-seed: --scope must be direction or surface');
   }
+
   if (!Number.isInteger(reroll) || reroll < 0) {
     throw new Error('concept-seed: --reroll must be a non-negative integer');
   }
+
   if (register !== null && register !== 'safer' && register !== 'bolder') {
     throw new Error('concept-seed: --register must be safer or bolder');
   }
+
   if (register !== null && reroll < 1) {
     throw new Error('concept-seed: --register steers a re-roll round; pass --reroll <n> with it');
   }
+
   if (register !== null && scope !== 'direction') {
     throw new Error('concept-seed: --register applies to direction rounds only');
   }
+
   if (mode !== null && !SEED_MODES.has(mode)) {
     throw new Error('concept-seed: --mode must be persuade, operate, read, or experience');
   }
+
   // Grain needs no mode: how much of the product is in play is independent of
   // which register of work it is.
   if (grain !== null && !COMPOSITION_GRAINS.includes(grain)) {
     throw new Error(`concept-seed: --grain must be one of ${COMPOSITION_GRAINS.join(', ')}`);
   }
+
   if (platform !== null && !COMPOSITION_PLATFORMS.includes(platform)) {
     throw new Error(`concept-seed: --platform must be one of ${COMPOSITION_PLATFORMS.join(', ')}`);
   }
+
   if (!Number.isInteger(candidateCount) || candidateCount < 5 || candidateCount > 7) {
     throw new Error('concept-seed: --candidate-count must be an integer from 5 to 7');
   }
+
   const unit = (salt) => {
     const h = crypto.createHash('sha256').update(`${scope}:${salt}:${key}`).digest();
+
     return h.readUInt32BE(0) / 0xffffffff;
   };
   const indexSalt = reroll === 0 ? 'index' : `index:reroll-${reroll}`;
@@ -343,12 +409,19 @@ export function renderConceptSeed({
   // model's taste. The dice pick all three; the primary index leads. The
   // no-lineup rule stays direction-only, where it was written for worlds.
   const dealtIndices = [buildIndex];
+
   for (let draw = 0; scope === 'surface' && dealtIndices.length < Math.min(3, candidateCount); draw += 1) {
     const idx = 1 + Math.floor(unit(`${indexSalt}:deal-${draw}`) * candidateCount);
-    if (!dealtIndices.includes(idx)) dealtIndices.push(idx);
+
+    if (!dealtIndices.includes(idx)) {
+dealtIndices.push(idx);
+}
+
     if (draw > 64) { // hash repeats cannot stall the deal
       for (let fill = 1; dealtIndices.length < Math.min(3, candidateCount); fill += 1) {
-        if (!dealtIndices.includes(fill)) dealtIndices.push(fill);
+        if (!dealtIndices.includes(fill)) {
+dealtIndices.push(fill);
+}
       }
     }
   }
@@ -357,8 +430,10 @@ export function renderConceptSeed({
   // then a degraded assignment-only seed. The assigned index is pure local
   // math, so even a fully offline run keeps the anti-argmax mechanism.
   let data = _resolvedData ?? null;
+
   if (_resolvedData === undefined) {
     const local = loadLocal(catalogDir);
+
     if (local) {
       const { approved, picks, poolRevision, catalogCount } = selectApprovedChallengers({
         scope,
@@ -375,6 +450,7 @@ export function renderConceptSeed({
         challengers: picks,
         ...(() => {
           const dealt = dealCompositions({ scope, key, reroll, mode, grain, platform, sourceCompositions: local.compositions });
+
           return { compositions: dealt.picks, compositionMatch: dealt.match };
         })(),
       };
@@ -492,6 +568,7 @@ the product without weakening semantics, performance, or fallback behavior.`;
     // bolder register is exactly the thing degradation took away, so it
     // falls back to a plain grounded round, disclosed.
     const degradedHeader = `${scope.toUpperCase()} CONCEPT SEED (key: ${key}; mode: ${mode ?? 'unscoped'}; source: degraded; rerun with --scope ${scope}${mode ? ` --mode ${mode}` : ''} --from ${key}${reroll > 0 ? ` --reroll ${reroll}` : ''}${register ? ` --register ${register}` : ''} --candidate-count ${candidateCount})`;
+
     if (register === 'safer') {
       return `${degradedHeader}
 SAFER REGISTER (user-requested): the assigned index is suspended this
@@ -508,6 +585,7 @@ REGISTER (restated for truncated readers): safer, user-requested; the
 assigned index is suspended this round and the user picks; seed key ${key}.
 `;
     }
+
     const degradedRegister = register === 'bolder'
       ? `BOLDER REGISTER UNAVAILABLE: bolder deals foreign forms, and this roll ran
   degraded with no catalog and no roll service, so there is nothing bold to
@@ -515,6 +593,7 @@ assigned index is suspended this round and the user picks; seed key ${key}.
   assignment below applies.
 `
       : '';
+
     return `${degradedHeader}
 ${degradedRegister}${scope === 'direction' ? `ASSIGNED INDEX: ${buildIndex}` : `DEALT INDICES: ${dealtIndices.join(', ')} (index ${buildIndex} leads)`}
   ${promotedInstruction}
@@ -569,16 +648,22 @@ ${buildIndex} leads. Present all three dealt structures; seed key ${key}.`}
   // the exact failure this axis exists to fix.
   const match = data.compositionMatch ?? null;
   const grainNote = (() => {
-    if (!match?.grain) return '';
+    if (!match?.grain) {
+return '';
+}
+
     if (match.grainAvailable === 0) {
       return `\nNONE of these sit at the requested ${match.grain} grain, because the catalog holds no ${match.grain}-grain composition yet. Derive that structure yourself and borrow only their sequence and attention laws.`;
     }
+
     if (match.atGrain === 0) {
       return `\nNONE of these sit at the requested ${match.grain} grain, though ${match.grainAvailable} exist; these were topped up from the rest of the register. Treat their structure as borrowed.`;
     }
+
     if (match.atGrain < compositions.length) {
       return `\n${match.atGrain} of ${compositions.length} sit at the requested ${match.grain} grain; the rest were topped up from the register and their structure is borrowed.`;
     }
+
     return '';
   })();
   const compositionBlock = compositions.length > 0
@@ -657,6 +742,7 @@ ${buildIndex} of your own grounded list; seed key ${key}.`
 ${buildIndex} leads. Present all three dealt structures; seed key ${key}.`)
     : `REGISTER (restated for truncated readers): ${register}, user-requested; the
 assigned index is suspended this round; seed key ${key}.`;
+
   return `${scope.toUpperCase()} CONCEPT SEED (key: ${key}; mode: ${mode ?? 'unscoped'}; source: ${data.source}; approved pool: ${data.poolRevision}; ${data.approvedCount}/${data.catalogCount} human-approved; rerun with --scope ${scope}${mode ? ` --mode ${mode}` : ''} --from ${key}${reroll > 0 ? ` --reroll ${reroll}` : ''}${register ? ` --register ${register}` : ''} --candidate-count ${candidateCount} to reproduce this roll against this catalog revision)
 ${rerollBlock}${assignedBlock}
 ${challengerSection}${authorityInstruction}
@@ -678,6 +764,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const candidateCountIdx = args.indexOf('--candidate-count');
   const chosenIdx = args.indexOf('--chosen');
   const kindIdx = args.indexOf('--kind');
+
   try {
     if (chosenIdx !== -1 || kindIdx !== -1) {
       // Choice ping: always exits 0, telemetry must never fail a design flow.
@@ -698,6 +785,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       // rolled directions with no PRODUCT.md, so nothing grounded the fusion).
       // The --chosen branch above stays ungated; telemetry never blocks.
       const { loadContext } = await import('./context.mjs');
+
       if (!loadContext(process.cwd()).hasProduct) {
         process.stdout.write([
           'NO_PRODUCT_MD: the dice stay in the cup until product truth exists.',
@@ -706,6 +794,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         ].join(' ') + '\n');
         process.exit(1);
       }
+
       process.stdout.write(await renderConceptSeed({
         scope: scopeIdx !== -1 ? args[scopeIdx + 1] : 'surface',
         key: fromIdx !== -1
@@ -723,14 +812,19 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;
   }
+
   // A raced-out fetch may still hold a socket; exit explicitly so the CLI
   // never lingers on a dead network path after output is written. Destroy
   // fetch's global undici dispatcher first: process.exit() with a live
   // keep-alive socket trips a libuv assertion on Windows and aborts the
   // process after a successful roll (nodejs/node#56645).
   const dispatcher = globalThis[Symbol.for('undici.globalDispatcher.1')];
+
   if (dispatcher && typeof dispatcher.destroy === 'function') {
-    try { await dispatcher.destroy(); } catch { /* exit regardless */ }
+    try {
+ await dispatcher.destroy(); 
+} catch { /* exit regardless */ }
   }
+
   process.exit(process.exitCode ?? 0);
 }
