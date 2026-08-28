@@ -19,7 +19,6 @@ import {
     InputOTPSlot,
 } from '@/components/ui/input-otp';
 import { Spinner } from '@/components/ui/spinner';
-import { useAppearance } from '@/composables/useAppearance';
 import { useTwoFactorAuth } from '@/composables/useTwoFactorAuth';
 import { confirm } from '@/routes/two-factor';
 import type { TwoFactorConfigContent } from '@/types';
@@ -28,8 +27,6 @@ type Props = {
     requiresConfirmation: boolean;
     twoFactorEnabled: boolean;
 };
-
-const { resolvedAppearance } = useAppearance();
 
 const props = defineProps<Props>();
 const isOpen = defineModel<boolean>('isOpen');
@@ -170,15 +167,14 @@ watch(
                                     v-else
                                     class="relative z-10 overflow-hidden border p-5"
                                 >
+                                    <!--
+                                        The QR code is generated as dark-on-light.
+                                        The product is dark only, so it is always
+                                        inverted — see DESIGN.md, Colour.
+                                    -->
                                     <div
                                         v-html="qrCodeSvg"
-                                        class="flex aspect-square size-full items-center justify-center"
-                                        :style="{
-                                            filter:
-                                                resolvedAppearance === 'dark'
-                                                    ? 'invert(1) brightness(1.5)'
-                                                    : undefined,
-                                        }"
+                                        class="flex aspect-square size-full items-center justify-center [filter:invert(1)_brightness(1.5)]"
                                     />
                                 </div>
                             </div>
@@ -226,7 +222,7 @@ watch(
                                     >
                                         <Check
                                             v-if="copied"
-                                            class="w-4 text-green-500"
+                                            class="w-4 text-primary"
                                         />
                                         <Copy v-else class="w-4" />
                                     </button>

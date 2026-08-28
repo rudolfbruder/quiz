@@ -1,0 +1,39 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('review_states', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('question_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('topic_id')->constrained()->cascadeOnDelete();
+            $table->float('stability');
+            $table->float('difficulty');
+            $table->timestamp('due_at');
+            $table->timestamp('last_reviewed_at');
+            $table->unsignedInteger('reps')->default(0);
+            $table->unsignedInteger('lapses')->default(0);
+            $table->timestamps();
+
+            $table->unique(['user_id', 'question_id']);
+            $table->index(['user_id', 'topic_id', 'due_at']);
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('review_states');
+    }
+};

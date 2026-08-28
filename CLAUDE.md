@@ -1,4 +1,336 @@
 <laravel-boost-guidelines>
+=== .ai/00-project-context rules ===
+
+# Project: Quiz
+
+An AI-powered study app. A logged-in user uploads a document (PDF, Word, or plain text). The app stores it, sends
+it to OpenAI through the Laravel AI SDK, and generates quiz questions from its content. From then on the user
+receives a small daily quiz — questions they have not seen recently — and notifications reminding them to take it.
+
+## The flow, end to end
+
+1. **Upload.** Authenticated user uploads a file. It is validated (type, size, page count) and stored on a disk.
+   The upload row is created immediately with a `pending` status; the user is not made to wait.
+2. **Analyze.** A queued job sends the stored file to the model as an attachment and asks for **three candidate
+   quiz outlines** for that source — different angles/scopes over the same material.
+3. **Choose.** The user picks one of the three proposals. Only the chosen one is expanded.
+4. **Generate.** A queued job produces the full question set (many questions, each with its own answer options and
+   exactly-marked correct option(s)) as **structured JSON output** — never free text that we then parse.
+5. **Serve daily.** Each day the user gets a short quiz (default 5 questions) per topic, selected so it avoids
+   questions they have already been served inside a cooldown window (default 3 days).
+6. **Remind.** Notifications tell the user a fresh quiz is waiting for a topic.
+
+## Hard limits (enforce, do not "handle gracefully" by silently truncating)
+
+- Accepted types: PDF, DOCX, TXT/MD. Text-bearing documents only for now — no image-only scans, no OCR.
+- Maximum **25 pages** per document. Reject above that with a validation error naming the real page count.
+- One generation run per source at a time. A source already `processing` cannot be re-queued.
+
+## Stack (fixed — do not add to it without approval)
+
+| Concern | Choice |
+|---|---|
+| Backend | Laravel 13, PHP 8.4 |
+| Auth | Laravel Fortify (2FA + passkeys already wired) |
+| AI | `laravel/ai` (Laravel AI SDK), OpenAI provider — **the only** way we call a model |
+| Boundary types | `spatie/laravel-data` — **all** input and output |
+| Views | Inertia v3 + Vue 3 (`<script setup lang="ts">`) |
+| Styling | Tailwind CSS v4 only; design work goes through the `impeccable` skill |
+| Routing to JS | Laravel Wayfinder (generated) |
+| Background work | Laravel queues + notifications |
+| Tests | Pest 5 |
+| Static analysis | Larastan / PHPStan level 7 |
+| Spec workflow | OpenSpec (`openspec/`) |
+
+## Non-negotiables
+
+These override any generic Laravel habit. Violating one is a bug, not a style choice.
+
+1. **Code is organised by domain, not by layer.** `app/Domains/<Domain>/{Models,Data,Actions,Services,Jobs,
+   Notifications,Agents,Enums,Policies}`. `User` and controllers keep their Laravel-default homes. See
+   `.ai/20-architecture`.
+2. **Every HTTP boundary crosses a `Data` object.** No `FormRequest` in new code, no API Resources, no raw arrays or
+   Eloquent models handed to `Inertia::render()`. See `.ai/30-data-objects`.
+3. **All model calls go through a `laravel/ai` agent class** in the owning domain's `Agents/` folder. No raw HTTP to OpenAI, no other
+   SDK, no inline prompt strings in controllers or jobs. See `.ai/35-ai-generation`.
+4. **Any AI output the app persists must come from a declared JSON schema** (`HasStructuredOutput`). Never parse
+   prose, never `json_decode()` a model reply.
+5. **Model calls never happen in the request cycle.** Upload responds immediately; generation runs queued.
+6. **Fortify owns authentication.** See `.ai/60-auth`.
+7. **Tailwind utilities only.** See `.ai/80-styling`.
+8. **Wayfinder for every URL in JS.** See `.ai/70-frontend`.
+9. **Every change ships with a test**, with AI faked. See `.ai/90-testing`.
+10. **Every feature starts as an OpenSpec change.** See `.ai/10-workflow`.
+
+## Domain vocabulary
+
+Use these names consistently — tables, models, Data objects, routes, Vue pages, notifications. The exact columns
+and relations are pinned per feature in its OpenSpec change; the *names* are settled here.
+
+- `Topic` — the subject area a user studies ("the domain"). Daily quizzes and cooldowns are scoped per topic.
+- `Source` — one uploaded document: disk path, original name, mime type, page count, extraction status.
+  Named `Source`, never `Document` — `Laravel\Ai\Files\Document` already owns that name in our imports.
+- `QuizProposal` — one of the three AI-suggested outlines for a source. Exactly one gets accepted.
+- `Quiz` — the accepted proposal, expanded. Belongs to a source and a topic; has many questions.
+- `Question` — belongs to a quiz; has many options and an explanation.
+- `Option` — one answer choice on a question; carries the `is_correct` flag.
+- `Attempt` — one served daily quiz for one user: the questions given, when, and the resulting score.
+- `Response` — the option(s) a user picked for one question inside one attempt. This table is also the
+  "already asked" record the no-repeat selection reads.
+
+Verbs: a user *uploads* a source, *accepts* a proposal; the app *generates* questions, *serves* an attempt,
+*scores* it, and *reminds* the user.
+
+## Selection rules (the part that is easy to get wrong)
+
+- A question is **eligible** for a user's daily quiz when it has not been served to that user within the cooldown
+  window (default 3 days, configurable — not hardcoded at the call site).
+- If eligible questions run out, prefer the **least recently served** ones rather than serving nothing or repeating
+  yesterday's set. Never return an empty quiz silently — say why.
+- Selection is deterministic per (user, topic, day) so a page refresh does not reshuffle the quiz.
+- Selection logic lives in one action (`SelectDailyQuestions`) and is unit-tested directly. Do not scatter
+  `whereNotIn` fragments across controllers.
+
+## Language
+
+- All user-facing strings go through `__()`, including notification bodies.
+- Code, comments, commit messages, and specs are written in English.
+
+=== .ai/10-workflow rules ===
+
+# Workflow
+
+## Spec first: OpenSpec
+
+Any change that adds or alters behaviour is an OpenSpec change before it is code.
+
+1. `openspec-propose` — write the proposal, delta specs, and task list into `openspec/changes/<change-id>/`.
+2. `openspec-apply-change` — implement the tasks, ticking them off as they land.
+3. `openspec-archive-change` — archive once shipped and specs are synced.
+
+Use `openspec-explore` when the requirement is still fuzzy — think there, not in the implementation.
+Use `openspec-update-change` when the plan shifts mid-flight; never let code drift from an unrevised change.
+
+Skip OpenSpec only for: typo fixes, formatting, dependency bumps, and non-behavioural refactors.
+When in doubt, propose — a small proposal costs less than a wrong implementation.
+
+**One change, one concern.** Do not fold an unrelated fix into an open change; propose a second one.
+
+## Skills
+
+Activate the matching skill *before* writing code in its domain, not after getting stuck:
+
+| Working on | Skill |
+|---|---|
+| Any Laravel backend code | `laravel-best-practices` |
+| Auth, login, 2FA, passkeys | `fortify-development` |
+| Vue pages, forms, navigation | `inertia-vue-development` |
+| Route helpers in TS | `wayfinder-development` |
+| Utility classes / layout | `tailwindcss-development` |
+| Any UI design or polish work | `impeccable` |
+| Writing or reviewing tests | `testing-best-practices` |
+| `Laravel\Ai\` usage | `ai-sdk-development` |
+| Recording new house rules | `infer-conventions` |
+
+## Order of work inside a change
+
+1. Migration + model + factory.
+2. Data objects (request and response) with their validation rules.
+3. Route + controller + action.
+4. Feature test — red, then green.
+5. Vue page and components.
+6. Quality gates (`.ai/95-quality-gates`).
+
+Backend before frontend. A Vue page written against a prop shape that does not exist yet is rework.
+
+## Recording decisions
+
+When a decision is durable and non-obvious, record it with the Boost `record-rule` tool so it lands in `.ai/rules`
+for the whole team. Do not store project rules in personal agent memory. Guidelines in `.ai/guidelines` are the
+project-wide baseline; `.ai/rules` holds narrower, path-scoped rules discovered along the way.
+
+=== .ai/20-architecture rules ===
+
+# Architecture
+
+## Domain-driven layout — this is the rule that outranks Laravel defaults
+
+Application code lives under `app/Domains/<Domain>/`. Each domain owns everything it needs: models, services,
+repositories, jobs, notifications, agents, data objects, enums, events, policies. A domain is a vertical slice, not
+a layer. Code inside a domain folder is grouped by *what it belongs to*, then by *what it is*.
+
+Two deliberate exceptions:
+
+- **`app/Models/User.php` stays where it is.** Fortify, the auth guards, and framework conventions are bound to it.
+- **Controllers stay in `app/Http/Controllers/<Domain>/`.** Standard Laravel HTTP layer, grouped by domain folder.
+
+```
+app/
+  Domains/
+    Source/                         uploads: storing, validating, extracting documents
+      Models/            Source.php
+      Data/              StoreSourceData.php  SourceData.php
+      Actions/           StoreUploadedSource.php  DeleteSource.php
+      Services/          SourceTextExtractor.php  PageCounter.php
+      Repositories/      (only if it earns its place — see below)
+      Jobs/              AnalyzeSource.php
+      Notifications/
+      Enums/             SourceStatus.php
+      Policies/          SourcePolicy.php
+      Events/            SourceUploaded.php
+    Quiz/                           proposals, questions, generation
+      Models/            Quiz.php  QuizProposal.php  Question.php  Option.php
+      Data/              QuizData.php  GeneratedQuestionData.php  AcceptProposalData.php
+      Actions/           AcceptQuizProposal.php  PersistGeneratedQuestions.php
+      Agents/            ProposeQuizOutlines.php  GenerateQuizQuestions.php
+      Jobs/              GenerateQuiz.php
+      Enums/             QuestionType.php
+      Policies/          QuizPolicy.php
+    Attempt/                        serving daily quizzes, scoring, reminders
+      Models/            Attempt.php  Response.php
+      Data/              AttemptData.php  SubmitResponseData.php
+      Actions/           SelectDailyQuestions.php  StartAttempt.php  ScoreAttempt.php
+      Notifications/     DailyQuizAvailable.php
+      Jobs/
+    Topic/
+      Models/            Topic.php
+      Data/
+      Actions/
+  Models/
+    User.php                        stays here — framework/Fortify bound
+  Http/
+    Controllers/<Domain>/           thin HTTP layer, grouped by domain
+    Middleware/
+  Actions/Fortify/                  Fortify-owned, do not repurpose
+  Concerns/                         cross-domain traits only
+  Providers/
+database/
+  migrations/                       all migrations, flat, standard Laravel
+  factories/<Domain>/               namespaced Database\Factories\<Domain>
+  seeders/
+resources/js/
+  pages/<domain>/                   Inertia pages mirror the domain names
+  components/  layouts/  types/
+routes/web.php, routes/settings.php
+tests/Feature/<Domain>/  tests/Unit/<Domain>/
+```
+
+Namespaces follow the path: `App\Domains\Quiz\Models\Question`, `App\Domains\Attempt\Actions\ScoreAttempt`.
+No composer change is needed — `App\` already maps to `app/`.
+
+### Two traps this layout creates — handle them explicitly
+
+Laravel's auto-discovery guesses `App\Models\X` and `App\Policies\XPolicy`. Domain models break both guesses, so
+wire them with attributes instead of hoping:
+
+```php
+namespace App\Domains\Quiz\Models;
+
+use App\Domains\Quiz\Policies\QuizPolicy;
+use Database\Factories\Quiz\QuizFactory;
+use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Attributes\UsePolicy;
+use Illuminate\Database\Eloquent\Model;
+
+#[UseFactory(QuizFactory::class)]
+#[UsePolicy(QuizPolicy::class)]
+class Quiz extends Model
+{
+    //
+}
+```
+
+Never rely on convention-based factory or policy resolution for a domain model. Missing `#[UseFactory]` surfaces as
+a confusing "class not found `Database\Factories\Domains\Quiz\Models\QuizFactory`" at test time.
+
+### Domain boundaries
+
+- A domain may depend on another domain's **models, Data objects, and actions** — through their public API, not by
+  reaching into its internals.
+- Dependencies point one way. `Attempt` reads `Quiz`; `Quiz` never reads `Attempt`. If you need the reverse, raise
+  a domain event instead of adding the back-reference.
+- Cross-domain orchestration belongs in the controller or in an action of the domain that owns the outcome — never
+  in a model.
+- Shared code that genuinely belongs to no single domain goes in `app/Concerns/`. If two domains keep needing the
+  same thing, that is a signal the boundary is wrong; fix the boundary rather than growing a shared bucket.
+- No `app/Services/`, `app/Repositories/`, `app/Jobs/`, or `app/Notifications/` at the top level. Those live inside
+  a domain.
+
+## What each building block is for
+
+- **Controller** — accepts a request `Data` object, calls one action or one job dispatch, returns an Inertia
+  response or a redirect. Thin: if it needs a local variable to hold intermediate state, that logic belongs in an
+  action. No business rules, no queries beyond a `find`.
+- **Action** — one use case, one public entry point (`__invoke` or a single verb method), constructor-injected
+  dependencies. The default place for domain behaviour. Receives Data objects or models, returns models or Data
+  objects. Never touches `Request`, `session()`, or `redirect()`.
+- **Service** — a cohesive collaborator wrapping one external or technical concern with several related methods
+  (`SourceTextExtractor`, `PageCounter`). Use a service when the thing has state or a real API surface; use an
+  action when it is one use case.
+- **Repository** — **only if needed.** Justify it: the same non-trivial query is needed by two or more callers, or
+  the data comes from somewhere that is not Eloquent. Otherwise query Eloquent directly from the action. A
+  repository that only forwards `find`/`create`/`save` to a model is noise and should be deleted.
+- **Job** — queued work. Thin: it resolves an action and calls it. Retries, backoff, timeouts, and status
+  transitions live here; the domain logic does not.
+- **Notification** — one class per message, queued, copy behind `__()`.
+- **Model** — persistence, relations, casts, scopes. No HTTP awareness, no view formatting, no AI calls.
+- **Data object** — the only shape that crosses the HTTP boundary, in either direction.
+- **Agent** — the only way a model is prompted. See `.ai/35-ai-generation`.
+
+## Request flow
+
+```
+Route  →  Controller  →  Action / Job dispatch  →  Service / Model
+   ↑           ↓                    ↓
+Wayfinder   Data object        Agent (queued only)
+                ↓
+          Inertia page (Vue)
+```
+
+## Rules
+
+- **No fat controllers, no anaemic actions.** Business rules live in actions, services, and models.
+- **No logic in Blade.** `resources/views/app.blade.php` is the only Blade file and stays a shell.
+- **Single source of truth for validation:** the request Data object. Never re-validate in the controller or action.
+- **Single source of truth for shape:** the response Data object. New field for the frontend? Add it there — do not
+  sneak an extra key into `Inertia::render()`.
+- Shared props (`auth.user`, `sidebarOpen`, flash) belong in `HandleInertiaRequests::share()` and nowhere else.
+- **No model call in a request cycle.** Controllers dispatch jobs; jobs call agents. See `.ai/35-ai-generation`.
+- Reach for a new abstraction on the second real caller. One caller = inline it.
+
+=== .ai/35-ai-generation rules ===
+
+# AI: question generation with the Laravel AI SDK
+
+**Full detail: `.ai/reference/ai-generation.md`. Read it before writing or changing any agent, AI job, or schema.**
+Activate the `ai-sdk-development` skill and search the docs first — the SDK is new.
+
+## Rules
+
+1. Every model call goes through `laravel/ai`. No raw HTTP to OpenAI, no other SDK, no `json_decode()` of prose.
+2. Agents live in the owning domain's `Agents/` folder — no top-level `app/Ai/`. One agent per job to be done.
+   An agent is a class, not a string: prompts never live in controllers, jobs, or Data objects.
+3. Agents implement `Agent`, use `Promptable`, put the system prompt in `instructions()`, and take their inputs
+   through the constructor. Configure with attributes (`#[Provider]`, `#[Model]`, `#[Temperature]`, `#[MaxTokens]`,
+   `#[Timeout]`), not magic numbers at the call site.
+4. Anything we persist comes back via `HasStructuredOutput` + `schema()`, every read field `->required()`.
+   Hydrate into a Data object and validate before the database — schema-valid output can still be semantically
+   wrong (zero correct options, duplicate distractors).
+5. Attach the stored file (`Files\Document::fromStorage(...)` / `fromId(...)`); do not paste extracted text.
+   Never attach a file that failed upload validation (type, size, 25-page limit).
+6. Model calls never run in a request cycle. Generation runs in our own queued job (`AnalyzeSource`,
+   `GenerateQuiz`) — not the agent's `queue()` helper — with explicit `$tries`, `$backoff`, `$timeout`, status
+   transitions (`pending` → `processing` → `ready` / `failed`), a transaction around the write, and a guard
+   against re-queuing a source already `processing`. A failure shows a real message and a retry, never a silent
+   empty state.
+7. Generate once per accepted proposal and persist; never regenerate to render a page. Check file ownership
+   before dispatching and again in the job. Treat model output as untrusted input. Log agent, source id, and
+   token usage — never prompt or document contents.
+8. Reminder notifications are queued Laravel notifications, one class per message, copy behind `__()`, dispatched
+   from a scheduled command, per-user opt-out respected, never twice for the same (user, topic, day).
+9. Tests never hit a provider: fake the agent, assert on what we do with the output, and cover failure paths
+   (provider throws, malformed-but-schema-valid output, zero correct options).
+
 === foundation rules ===
 
 # Laravel Boost Guidelines
@@ -7,7 +339,7 @@ The Laravel Boost guidelines are specifically curated by Laravel maintainers for
 
 ## Foundational Context
 
-This application is a Laravel application running on PHP 8.5. You are an expert with the Laravel ecosystem. Always use the APIs that match the installed major version of each package — do not assume a version.
+This application is a Laravel application running on PHP 8.4. You are an expert with the Laravel ecosystem. Always use the APIs that match the installed major version of each package — do not assume a version.
 
 Before relying on a package's API, confirm its installed version:
 - PHP packages: run `composer show --direct` to list direct dependencies with versions, or `composer show <vendor/package>` for a single package.

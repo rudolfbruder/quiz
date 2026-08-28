@@ -48,3 +48,50 @@ function something()
 {
     // ..
 }
+
+/**
+ * A structured generation response of the shape the agent's schema declares.
+ *
+ * Every generation test starts from a payload that would pass, and spoils only
+ * the part it is about, so a test that fails says which rule it broke.
+ *
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function generationRunPayload(array $overrides = []): array
+{
+    return array_replace([
+        'topic_name' => 'The Roman Republic',
+        'title' => 'The fall of the Roman Republic',
+        'language' => 'English',
+        'page_count' => 12,
+        'outline' => [
+            ['title' => 'The Gracchi', 'focus' => 'Land reform and the first political violence'],
+            ['title' => 'Sulla', 'focus' => 'The dictatorship and the precedent it set'],
+        ],
+        'questions' => [
+            generationRunQuestion('Which office did Tiberius Gracchus hold in 133 BC?', 'Tribune of the plebs'),
+            generationRunQuestion('Who marched on Rome in 88 BC?', 'Sulla'),
+            generationRunQuestion('What did the Senate call its emergency decree?', 'The senatus consultum ultimum'),
+        ],
+    ], $overrides);
+}
+
+/**
+ * One question of that payload, with exactly one option marked correct.
+ *
+ * @return array<string, mixed>
+ */
+function generationRunQuestion(string $text, string $answer): array
+{
+    return [
+        'text' => $text,
+        'explanation' => 'The document states this directly in the section it is drawn from.',
+        'options' => [
+            ['text' => $answer, 'is_correct' => true],
+            ['text' => $answer.' (a decade later)', 'is_correct' => false],
+            ['text' => $answer.' (in name only)', 'is_correct' => false],
+            ['text' => 'None of the material supports this', 'is_correct' => false],
+        ],
+    ];
+}
